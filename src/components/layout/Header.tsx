@@ -2,9 +2,11 @@ import React from 'react'
 import {
   Cloud,
   PanelLeftOpen,
+  Sparkles,
 } from 'lucide-react'
 import type { ActiveModule } from './Sidebar'
 import { db } from '@/db/localDb'
+import { openWebsite } from '@/utils/openWebsite'
 
 interface Props {
   activeModule: ActiveModule
@@ -111,7 +113,17 @@ export const Header: React.FC<Props> = ({
       </div>
 
       {/* Global Actions - Aligned with window controls */}
-      <div className="flex items-center h-full" style={{ WebkitAppRegion: 'no-drag' } as any}>
+      <div className="flex items-center h-full gap-2" style={{ WebkitAppRegion: 'no-drag' } as any}>
+        {/* Upgrade Action */}
+        <button
+          onClick={() => openWebsite('https://neurons.com')}
+          className="h-7.5 inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50/70 px-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition-all cursor-pointer select-none"
+          title="Upgrade plan on neurons.com"
+        >
+          <Sparkles className="h-3 w-3 fill-blue-600 text-blue-600 shrink-0" />
+          <span className="leading-none">Upgrade</span>
+        </button>
+
         {/* Export Backup */}
         <button
           onClick={handleExportBackup}

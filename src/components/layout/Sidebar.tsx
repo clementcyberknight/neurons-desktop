@@ -15,6 +15,7 @@ import iconStaff from '@/assets/icons-pack/User-Team-Group-Member--Streamline-Pl
 import iconTask from '@/assets/icons-pack/List-To-Do-Tasks-Checklist--Streamline-Plump.png'
 import iconExpense from '@/assets/icons-pack/Receipt--Streamline-Plump.png'
 import iconCashbook from '@/assets/icons-pack/Cashier--Streamline-Plump.png'
+import { openWebsite } from '@/utils/openWebsite'
 
 export type ActiveModule =
   | 'chat'
@@ -185,8 +186,9 @@ export const Sidebar: React.FC<Props> = ({
           </div>
 
           <button
-            onClick={() => onSelectModule('finance')}
+            onClick={() => openWebsite('https://neurons.com')}
             className="rounded-full border border-neutral-300 bg-white px-3 py-1 text-xs font-medium text-neutral-800 hover:bg-neutral-100 hover:text-black transition-all shrink-0 shadow-2xs cursor-pointer"
+            title="Upgrade plan on neurons.com"
           >
             Upgrade
           </button>

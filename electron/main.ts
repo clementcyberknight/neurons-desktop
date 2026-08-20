@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron'
 import path from 'node:path'
 import fs from 'node:fs'
 import { AIBridge } from './ai-bridge'
@@ -18,7 +18,7 @@ function createWindow() {
     height: 880,
     minWidth: 1080,
     minHeight: 700,
-    title: 'BAU Copilot — Offline Business OS',
+    title: 'Neurons — Offline Business OS',
     backgroundColor: '#ffffff',
     titleBarStyle: 'hidden',
     titleBarOverlay: {
@@ -31,6 +31,14 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
     },
+  })
+
+  // Open external links in user's default browser
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('https:') || url.startsWith('http:')) {
+      shell.openExternal(url)
+    }
+    return { action: 'deny' }
   })
 
   // Test active push message to Renderer-process.
@@ -63,11 +71,19 @@ ipcMain.handle('app:info', () => {
   }
 })
 
+ipcMain.handle('app:open-external', async (_, url: string) => {
+  if (url && (url.startsWith('https:') || url.startsWith('http:'))) {
+    await shell.openExternal(url)
+    return true
+  }
+  return false
+})
+
 ipcMain.handle('app:export-data', async (_, jsonData: string) => {
   if (!win) return false
   const { filePath } = await dialog.showSaveDialog(win, {
     title: 'Export Business Data Backup',
-    defaultPath: `bau-backup-${new Date().toISOString().split('T')[0]}.json`,
+    defaultPath: `neurons-backup-${new Date().toISOString().split('T')[0]}.json`,
     filters: [{ name: 'JSON Backup', extensions: ['json'] }],
   })
   if (filePath) {
