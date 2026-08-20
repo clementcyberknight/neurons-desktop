@@ -1,102 +1,110 @@
 import React, { useState, useEffect } from 'react'
 import { Sidebar, type ActiveModule } from './Sidebar'
 import { Header } from './Header'
-import { CopilotDrawer } from '@/components/ai/CopilotDrawer'
+import { ChatModule } from '@/modules/chat/ChatModule'
 import { DocumentsModule } from '@/modules/documents/DocumentsModule'
-import { PosModule } from '@/modules/pos/PosModule'
 import { InventoryModule } from '@/modules/inventory/InventoryModule'
-import { StaffModule } from '@/modules/staff/StaffModule'
+import { PosModule } from '@/modules/pos/PosModule'
 import { FinanceModule } from '@/modules/finance/FinanceModule'
+import { SalesModule } from '@/modules/sales/SalesModule'
+import { StaffModule } from '@/modules/staff/StaffModule'
 import { TasksModule } from '@/modules/tasks/TasksModule'
+import { ExpenseModule } from '@/modules/expense/ExpenseModule'
+import { CashbookModule } from '@/modules/cashbook/CashbookModule'
 import { initializeSeedDataIfEmpty } from '@/db/seedData'
 
 export const AppLayout: React.FC = () => {
-  const [activeModule, setActiveModule] = useState<ActiveModule>('inventory')
-  const [isCopilotOpen, setIsCopilotOpen] = useState(false)
+  const [activeModule, setActiveModule] = useState<ActiveModule>('chat')
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
+  const [chatKey, setChatKey] = useState(0)
 
   useEffect(() => {
     // Initialize seed data on first mount
     initializeSeedDataIfEmpty().catch(console.error)
-
-    // Keyboard Shortcuts (Ctrl+K for AI Copilot)
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
-        e.preventDefault()
-        setIsCopilotOpen((prev) => !prev)
-      }
-    }
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
   }, [])
 
-  const handleAskAIWithPrompt = (promptText: string) => {
-    setIsCopilotOpen(true)
-    // Could also prefill or dispatch prompt
+  const handleNewAction = () => {
+    setChatKey((prev) => prev + 1)
+    setActiveModule('chat')
   }
 
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-background text-foreground font-sans">
-      {/* Notion-style Sidebar */}
+    <div className="flex h-screen w-screen overflow-hidden bg-white text-neutral-900 font-sans antialiased">
+      {/* Neurons Side Navigation Panel */}
       <Sidebar
         activeModule={activeModule}
         onSelectModule={setActiveModule}
-        onOpenCopilot={() => setIsCopilotOpen(true)}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+        onNewAction={handleNewAction}
       />
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-slate-950/20">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden bg-white">
         {/* Top Header */}
         <Header
           activeModule={activeModule}
-          onOpenCopilot={() => setIsCopilotOpen(true)}
           searchQuery={searchQuery}
           onSearchChange={setSearchQuery}
+          isSidebarCollapsed={isSidebarCollapsed}
+          onToggleSidebar={() => setIsSidebarCollapsed(false)}
         />
 
         {/* Dynamic Module Content */}
-        <main className="flex-1 overflow-hidden">
+        <main className="flex-1 overflow-hidden bg-white">
+          {activeModule === 'chat' && (
+            <ChatModule key={chatKey} />
+          )}
           {activeModule === 'documents' && (
             <DocumentsModule
               searchQuery={searchQuery}
-              onAskAI={handleAskAIWithPrompt}
+              onAskAI={() => {}}
             />
-          )}
-          {activeModule === 'pos' && (
-            <PosModule onAskAI={handleAskAIWithPrompt} />
           )}
           {activeModule === 'inventory' && (
             <InventoryModule
               searchQuery={searchQuery}
-              onAskAI={handleAskAIWithPrompt}
+              onAskAI={() => {}}
+            />
+          )}
+          {activeModule === 'pos' && (
+            <PosModule onAskAI={() => {}} />
+          )}
+          {activeModule === 'finance' && (
+            <FinanceModule onAskAI={() => {}} />
+          )}
+          {activeModule === 'sales' && (
+            <SalesModule
+              searchQuery={searchQuery}
+              onAskAI={() => {}}
             />
           )}
           {activeModule === 'staff' && (
             <StaffModule
               searchQuery={searchQuery}
-              onAskAI={handleAskAIWithPrompt}
+              onAskAI={() => {}}
             />
-          )}
-          {activeModule === 'finance' && (
-            <FinanceModule onAskAI={handleAskAIWithPrompt} />
           )}
           {activeModule === 'tasks' && (
             <TasksModule
               searchQuery={searchQuery}
-              onAskAI={handleAskAIWithPrompt}
+              onAskAI={() => {}}
             />
+          )}
+          {activeModule === 'expense' && (
+            <ExpenseModule
+              searchQuery={searchQuery}
+              onAskAI={() => {}}
+            />
+          )}
+          {activeModule === 'cashbook' && (
+            <CashbookModule onAskAI={() => {}} />
           )}
         </main>
       </div>
-
-      {/* ChatGPT-style AI Copilot Drawer */}
-      <CopilotDrawer
-        isOpen={isCopilotOpen}
-        onClose={() => setIsCopilotOpen(false)}
-        onActionApplied={() => {
-          // Trigger reactive updates across live queries
-        }}
-      />
     </div>
   )
 }
+
+export default AppLayout

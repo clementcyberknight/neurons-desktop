@@ -36,15 +36,15 @@ export const ShiftScheduleCard: React.FC<Props> = ({ data, onApply }) => {
   }
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4 shadow-lg text-slate-100 my-2">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+    <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-2xs text-neutral-900 my-2">
+      <div className="flex items-center justify-between border-b border-neutral-100 pb-3 mb-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-500/10 text-blue-400">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-100 text-neutral-800">
             <Calendar className="h-4 w-4" />
           </div>
           <div>
-            <h4 className="text-sm font-semibold tracking-tight">Staff Shift Rota</h4>
-            <span className="text-xs text-slate-400 font-mono">Week Starting: {data.week_starting || 'Next Week'}</span>
+            <h4 className="text-sm font-semibold tracking-tight text-neutral-900">Staff Shift Rota</h4>
+            <span className="text-xs text-neutral-500 font-mono">Week Starting: {data.week_starting || 'Next Week'}</span>
           </div>
         </div>
         <button
@@ -52,8 +52,8 @@ export const ShiftScheduleCard: React.FC<Props> = ({ data, onApply }) => {
           disabled={applied}
           className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
             applied
-              ? 'bg-blue-500/20 text-blue-400'
-              : 'bg-blue-600 hover:bg-blue-500 text-white shadow-sm'
+              ? 'bg-neutral-100 text-neutral-800'
+              : 'bg-black hover:bg-neutral-800 text-white shadow-xs'
           }`}
         >
           {applied ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
@@ -64,23 +64,23 @@ export const ShiftScheduleCard: React.FC<Props> = ({ data, onApply }) => {
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead>
-            <tr className="border-b border-slate-800 text-slate-400">
+            <tr className="border-b border-neutral-200 text-neutral-500 font-mono">
               <th className="pb-2 font-medium">Day</th>
               <th className="pb-2 font-medium">Staff Member</th>
               <th className="pb-2 font-medium">Role</th>
               <th className="pb-2 font-medium">Shift Time</th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-slate-800/50">
+          <tbody className="divide-y divide-neutral-100">
             {data.schedule.map((s, idx) => (
-              <tr key={idx} className="hover:bg-slate-800/30">
-                <td className="py-2 font-semibold text-slate-200">{s.day}</td>
-                <td className="py-2 text-slate-300 flex items-center gap-1.5">
-                  <UserCheck className="h-3 w-3 text-blue-400" />
+              <tr key={idx} className="hover:bg-neutral-50">
+                <td className="py-2 font-semibold text-neutral-900">{s.day}</td>
+                <td className="py-2 text-neutral-800 flex items-center gap-1.5 font-medium">
+                  <UserCheck className="h-3 w-3 text-neutral-600" />
                   {s.name}
                 </td>
-                <td className="py-2 text-slate-400">{s.role}</td>
-                <td className="py-2 font-mono text-emerald-400">{s.shift}</td>
+                <td className="py-2 text-neutral-500">{s.role}</td>
+                <td className="py-2 font-mono text-neutral-900 font-bold">{s.shift}</td>
               </tr>
             ))}
           </tbody>

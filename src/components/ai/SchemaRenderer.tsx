@@ -18,7 +18,7 @@ interface Props {
 export const SchemaRenderer: React.FC<Props> = ({ schema, rawText, onApplyAction }) => {
   if (!schema || typeof schema !== 'object') {
     return (
-      <div className="prose prose-invert prose-sm text-slate-200 leading-relaxed break-words">
+      <div className="prose prose-sm text-neutral-800 leading-relaxed break-words">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>
           {rawText}
         </ReactMarkdown>
@@ -43,7 +43,7 @@ export const SchemaRenderer: React.FC<Props> = ({ schema, rawText, onApplyAction
       return <DeepResearchCard data={schema as any} />
     case 'CONVERSATIONAL_CHAT':
       return (
-        <div className="prose prose-invert prose-sm text-slate-200 leading-relaxed break-words">
+        <div className="prose prose-sm text-neutral-800 leading-relaxed break-words">
           <ReactMarkdown remarkPlugins={[remarkGfm]}>
             {schema.message || rawText}
           </ReactMarkdown>
@@ -53,9 +53,9 @@ export const SchemaRenderer: React.FC<Props> = ({ schema, rawText, onApplyAction
       return (
         <div className="space-y-2">
           {schema.message ? (
-            <p className="text-slate-200 text-sm leading-relaxed">{schema.message}</p>
+            <p className="text-neutral-800 text-sm leading-relaxed">{schema.message}</p>
           ) : (
-            <div className="prose prose-invert prose-sm text-slate-200 leading-relaxed break-words">
+            <div className="prose prose-sm text-neutral-800 leading-relaxed break-words">
               <ReactMarkdown remarkPlugins={[remarkGfm]}>
                 {rawText}
               </ReactMarkdown>

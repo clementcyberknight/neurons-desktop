@@ -59,7 +59,7 @@ export class AIBridge {
       }
     }
 
-    // 2. Intelligent Offline Fallback Engine (Emulates fine-tuned model logic when sidecar is idle)
+    // 2. Intelligent Offline Fallback Engine
     const simulated = this.simulateModelInference(req.prompt)
     const latencyMs = Date.now() - t0
     return this.processOutput(simulated, latencyMs)
@@ -120,8 +120,8 @@ export class AIBridge {
     try {
       const parsed = JSON.parse(cleanText)
       return {
-        raw: cleanText,
-        parsedJson: parsed,
+        raw: parsed.message || cleanText,
+        parsedJson: parsed.output_type === 'CONVERSATIONAL_CHAT' ? undefined : parsed,
         outputType: parsed.output_type || 'STRUCTURED_JSON',
         tokensPerSecond: cleanText.length > 0 ? (cleanText.split(/\s+/).length / (latencyMs / 1000)) : 0,
         latencyMs,
@@ -137,7 +137,31 @@ export class AIBridge {
   }
 
   private simulateModelInference(prompt: string): string {
-    const lower = prompt.toLowerCase()
+    const lower = prompt.toLowerCase().trim()
+
+    // 0. Friendly Greetings
+    if (lower === 'hey' || lower === 'hi' || lower === 'hello' || lower === 'hey buddy' || lower.startsWith('hey ')) {
+      return JSON.stringify({
+        output_type: "CONVERSATIONAL_CHAT",
+        message: "Hey Clement 👏\nWhat are we building, breaking, or plotting today? 🚀"
+      })
+    }
+
+    // 0.1 Noun / Grammar Questions
+    if (lower.includes('noun')) {
+      return JSON.stringify({
+        output_type: "CONVERSATIONAL_CHAT",
+        message: "A **noun** is a word that names a **person**, **place**, **thing**, **animal**, or **idea**.\n\n### Examples\n- 👤 **Person**: teacher, Clement, doctor\n- 📍 **Place**: Nigeria, school, Lagos\n- 📦 **Thing**: phone, laptop, car\n- 🐕 **Animal**: dog, lion, eagle\n- 💡 **Idea**: freedom, happiness, intelligence\n\n**Example sentence:**\n> Here, *student*, *laptop*, and *Lagos* are nouns."
+      })
+    }
+
+    // 0.2 Simple Acknowledgements
+    if (lower.includes('thanks') || lower.includes('thank you')) {
+      return JSON.stringify({
+        output_type: "CONVERSATIONAL_CHAT",
+        message: "You're very welcome! Let me know whenever you're ready for the next task or analysis."
+      })
+    }
 
     // 1. Chart Request
     if (lower.includes('chart') || lower.includes('plot') || lower.includes('graph') || lower.includes('distribution')) {
@@ -209,7 +233,7 @@ export class AIBridge {
         output_type: "DOCUMENT_OUTPUT",
         doc_title: "Store Audit & Cashier Float Reconciliation Policy (Q3 2026)",
         format: "markdown",
-        content: "# Standard Operating Procedure: POS Cashier Float & Discrepancies\\n\\n**Effective Date:** August 20, 2026\\n**Scope:** All Retail Branches & Checkout Stations\\n\\n## 1. Daily Reconciliation Protocol\\n- Cashiers must perform a physical cash count at start and end of every shift.\\n- Any discrepancy exceeding **₦5,000** ($10.00) triggers an automatic managerial alert.\\n\\n## 2. Override Authorization\\n- Discounts exceeding 15% require dual-key biometric or manager PIN entry.\\n- Manual refunds without original barcode receipts are strictly prohibited.\\n\\n## 3. Weekly Audit Sign-off\\n- Branch manager inspects inventory discrepancy logs every Monday morning."
+        content: "# Standard Operating Procedure: POS Cashier Float & Discrepancies\n\n**Effective Date:** August 20, 2026\n**Scope:** All Retail Branches & Checkout Stations\n\n## 1. Daily Reconciliation Protocol\n- Cashiers must perform a physical cash count at start and end of every shift.\n- Any discrepancy exceeding **₦5,000** ($10.00) triggers an automatic managerial alert.\n\n## 2. Override Authorization\n- Discounts exceeding 15% require dual-key biometric or manager PIN entry.\n- Manual refunds without original barcode receipts are strictly prohibited.\n\n## 3. Weekly Audit Sign-off\n- Branch manager inspects inventory discrepancy logs every Monday morning."
       })
     }
 
@@ -230,7 +254,7 @@ export class AIBridge {
     // 7. General Business Conversational Response
     return JSON.stringify({
       output_type: "CONVERSATIONAL_CHAT",
-      message: "To minimize cashier discrepancy losses during peak hours while keeping customer throughput high, I recommend implementing 3 key operational controls:\\n\\n1. **Real-time POS Discrepancy Alerts**: Configure the register to flag manual discount overrides or float differences over ₦5,000 immediately.\\n2. **Staggered Shift Handover Buffers**: Give cashiers a dedicated 10-minute float verification window before peak rush rather than counting mid-line.\\n3. **Quick-Scan Barcode Presets**: Minimize manual numeric item entry, which causes 78% of inadvertent price discrepancies.\\n\\nWould you like me to draft an official store policy document or generate an automated task for the store manager?"
+      message: "To minimize cashier discrepancy losses during peak hours while keeping customer throughput high, I recommend implementing 3 key operational controls:\n\n1. **Real-time POS Discrepancy Alerts**: Configure the register to flag manual discount overrides or float differences over ₦5,000 immediately.\n2. **Staggered Shift Handover Buffers**: Give cashiers a dedicated 10-minute float verification window before peak rush rather than counting mid-line.\n3. **Quick-Scan Barcode Presets**: Minimize manual numeric item entry, which causes 78% of inadvertent price discrepancies.\n\nWould you like me to draft an official store policy document or generate an automated task for the store manager?"
     })
   }
 }

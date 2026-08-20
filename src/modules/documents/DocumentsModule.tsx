@@ -9,19 +9,17 @@ import {
   Trash2,
   Edit3,
   Check,
-  Tag,
   BookOpen,
-  Sparkles,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 interface Props {
-  searchQuery: string
-  onAskAI: (prompt: string) => void
+  searchQuery?: string
+  onAskAI?: (prompt: string) => void
 }
 
-export const DocumentsModule: React.FC<Props> = ({ searchQuery, onAskAI }) => {
+export const DocumentsModule: React.FC<Props> = ({ searchQuery = '' }) => {
   const documents = useLiveQuery(async () => {
     let docs = await db.documents.toArray()
     if (searchQuery.trim()) {
@@ -54,7 +52,7 @@ export const DocumentsModule: React.FC<Props> = ({ searchQuery, onAskAI }) => {
       content: '# New Document\n\nStart writing your standard operating procedure or policy here...',
       category: 'notes',
       tags: ['Draft'],
-      author: 'Store Manager',
+      author: 'Akhimien Clement',
       isPinned: false,
       createdAt: now,
       updatedAt: now,
@@ -106,17 +104,17 @@ export const DocumentsModule: React.FC<Props> = ({ searchQuery, onAskAI }) => {
   }
 
   return (
-    <div className="flex h-full overflow-hidden">
+    <div className="flex h-full overflow-hidden bg-white">
       {/* Document Sidebar List */}
-      <div className="w-80 shrink-0 border-r border-slate-800 bg-slate-950/40 p-4 flex flex-col justify-between overflow-y-auto">
+      <div className="w-80 shrink-0 border-r border-neutral-200 bg-[#fafafa] p-4 flex flex-col justify-between overflow-y-auto">
         <div>
           <div className="flex items-center justify-between mb-3">
-            <span className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">
+            <span className="text-xs font-semibold uppercase tracking-wider text-neutral-500 font-mono">
               Knowledge Base ({documents.length})
             </span>
             <button
               onClick={handleCreateNew}
-              className="flex items-center gap-1 rounded-lg bg-indigo-600/20 text-indigo-400 hover:bg-indigo-600 hover:text-white px-2 py-1 text-xs font-medium transition-all"
+              className="flex items-center gap-1 rounded-lg bg-black hover:bg-neutral-800 text-white px-2.5 py-1 text-xs font-medium transition-all shadow-xs"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>New Doc</span>
@@ -132,21 +130,21 @@ export const DocumentsModule: React.FC<Props> = ({ searchQuery, onAskAI }) => {
                   onClick={() => handleSelect(doc)}
                   className={`group relative flex flex-col rounded-xl p-3 text-left transition-all cursor-pointer border ${
                     isSelected
-                      ? 'bg-slate-800/90 border-indigo-500/50 shadow-sm text-white'
-                      : 'border-slate-800/60 bg-slate-900/40 text-slate-300 hover:bg-slate-800/50 hover:border-slate-700'
+                      ? 'bg-white border-neutral-400 shadow-xs text-black'
+                      : 'border-neutral-200 bg-white text-neutral-700 hover:border-neutral-300'
                   }`}
                 >
                   <div className="flex items-start justify-between gap-2">
                     <div className="flex items-center gap-1.5 font-semibold text-xs truncate">
-                      <FileText className={`h-3.5 w-3.5 shrink-0 ${isSelected ? 'text-indigo-400' : 'text-slate-400'}`} />
+                      <FileText className={`h-3.5 w-3.5 shrink-0 ${isSelected ? 'text-black' : 'text-neutral-500'}`} />
                       <span className="truncate">{doc.title}</span>
                     </div>
                     {doc.isPinned && (
-                      <Pin className="h-3 w-3 text-amber-400 shrink-0 fill-amber-400" />
+                      <Pin className="h-3 w-3 text-neutral-900 shrink-0 fill-neutral-900" />
                     )}
                   </div>
-                  <div className="mt-2 flex items-center justify-between text-[10px] text-slate-400 font-mono">
-                    <span className="uppercase bg-slate-800/80 px-1.5 py-0.5 rounded">{doc.category}</span>
+                  <div className="mt-2 flex items-center justify-between text-[10px] text-neutral-500 font-mono">
+                    <span className="uppercase bg-neutral-100 px-1.5 py-0.5 rounded border border-neutral-200">{doc.category}</span>
                     <span>{new Date(doc.updatedAt).toLocaleDateString()}</span>
                   </div>
                 </div>
@@ -154,57 +152,42 @@ export const DocumentsModule: React.FC<Props> = ({ searchQuery, onAskAI }) => {
             })}
           </div>
         </div>
-
-        {/* AI Drafting Helper */}
-        <div className="mt-4 rounded-xl border border-indigo-500/20 bg-indigo-950/20 p-3">
-          <div className="flex items-center gap-1.5 text-xs font-semibold text-indigo-300 mb-1.5">
-            <Sparkles className="h-3.5 w-3.5" />
-            <span>AI Document Generator</span>
-          </div>
-          <p className="text-[11px] text-slate-400 mb-2">Generate SOPs or audit policies with custom markdown schema.</p>
-          <button
-            onClick={() => onAskAI('Prepare a detailed tax filing checklist and cashier float reconciliation policy in markdown format.')}
-            className="w-full rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-medium py-1.5 transition-all shadow-sm"
-          >
-            Draft Policy with AI
-          </button>
-        </div>
       </div>
 
       {/* Active Document Viewer / Editor */}
-      <div className="flex-1 flex flex-col overflow-hidden bg-slate-900/30">
+      <div className="flex-1 flex flex-col overflow-hidden bg-white">
         {activeDoc ? (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Document Action Bar */}
-            <div className="flex items-center justify-between border-b border-slate-800/80 px-6 py-3 bg-slate-950/40">
+            <div className="flex items-center justify-between border-b border-neutral-200 px-6 py-2.5 bg-white">
               <div className="flex items-center gap-2">
-                <span className="rounded bg-slate-800 px-2 py-0.5 text-xs font-mono uppercase text-indigo-400 border border-slate-700">
+                <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs font-mono uppercase text-neutral-800 border border-neutral-200">
                   {activeDoc.category}
                 </span>
-                <span className="text-xs text-slate-400">By {activeDoc.author}</span>
+                <span className="text-xs text-neutral-500">By {activeDoc.author}</span>
               </div>
 
               <div className="flex items-center gap-2">
                 <button
                   onClick={() => handleTogglePin(activeDoc)}
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-slate-800 hover:text-amber-400 transition-colors"
+                  className="rounded-lg p-1.5 text-neutral-500 hover:bg-neutral-100 hover:text-black transition-colors"
                   title="Pin document"
                 >
-                  <Pin className={`h-4 w-4 ${activeDoc.isPinned ? 'text-amber-400 fill-amber-400' : ''}`} />
+                  <Pin className={`h-4 w-4 ${activeDoc.isPinned ? 'text-black fill-black' : ''}`} />
                 </button>
 
                 {isEditing ? (
                   <button
                     onClick={handleSaveEdit}
-                    className="flex items-center gap-1 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 text-xs font-medium transition-all shadow-sm"
+                    className="flex items-center gap-1 rounded-lg bg-black hover:bg-neutral-800 text-white px-3 py-1.5 text-xs font-medium transition-all shadow-xs"
                   >
                     <Check className="h-3.5 w-3.5" />
-                    <span>Save Changes</span>
+                    <span>Save</span>
                   </button>
                 ) : (
                   <button
                     onClick={handleStartEdit}
-                    className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 text-xs font-medium transition-all shadow-sm"
+                    className="flex items-center gap-1 rounded-lg border border-neutral-300 bg-white hover:bg-neutral-100 text-neutral-800 px-3 py-1.5 text-xs font-medium transition-all shadow-xs"
                   >
                     <Edit3 className="h-3.5 w-3.5" />
                     <span>Edit</span>
@@ -213,7 +196,7 @@ export const DocumentsModule: React.FC<Props> = ({ searchQuery, onAskAI }) => {
 
                 <button
                   onClick={() => handleDelete(activeDoc.id)}
-                  className="rounded-lg p-1.5 text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-colors"
+                  className="rounded-lg p-1.5 text-neutral-500 hover:bg-red-50 hover:text-red-600 transition-colors"
                   title="Delete document"
                 >
                   <Trash2 className="h-4 w-4" />
@@ -229,15 +212,15 @@ export const DocumentsModule: React.FC<Props> = ({ searchQuery, onAskAI }) => {
                     type="text"
                     value={editTitle}
                     onChange={(e) => setEditTitle(e.target.value)}
-                    className="w-full text-2xl font-bold bg-transparent text-white border-b border-slate-700 pb-2 focus:outline-none focus:border-indigo-500"
+                    className="w-full text-2xl font-bold bg-transparent text-neutral-900 border-b border-neutral-300 pb-2 focus:outline-none focus:border-black"
                     placeholder="Document Title..."
                   />
                   <div className="flex items-center gap-3">
-                    <label className="text-xs text-slate-400">Category:</label>
+                    <label className="text-xs text-neutral-500">Category:</label>
                     <select
                       value={editCategory}
                       onChange={(e) => setEditCategory(e.target.value as any)}
-                      className="bg-slate-800 border border-slate-700 text-slate-200 rounded px-2 py-1 text-xs"
+                      className="bg-neutral-50 border border-neutral-300 text-neutral-800 rounded px-2 py-1 text-xs focus:outline-none"
                     >
                       <option value="policy">Policy</option>
                       <option value="sop">SOP</option>
@@ -250,22 +233,24 @@ export const DocumentsModule: React.FC<Props> = ({ searchQuery, onAskAI }) => {
                     value={editContent}
                     onChange={(e) => setEditContent(e.target.value)}
                     rows={18}
-                    className="w-full rounded-xl bg-slate-950/80 border border-slate-800 p-4 text-sm font-mono text-slate-200 focus:outline-none focus:border-indigo-500"
+                    className="w-full rounded-xl bg-neutral-50 border border-neutral-300 p-4 text-sm font-mono text-neutral-900 focus:outline-none focus:border-black"
                     placeholder="Markdown content..."
                   />
                 </div>
               ) : (
-                <div className="prose prose-invert max-w-none">
-                  <h1 className="text-2xl font-bold text-white mb-4">{activeDoc.title}</h1>
-                  <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                    {activeDoc.content}
-                  </ReactMarkdown>
+                <div className="prose max-w-none text-neutral-900">
+                  <h1 className="text-2xl font-bold text-neutral-900 mb-4">{activeDoc.title}</h1>
+                  <div className="text-neutral-800 leading-relaxed">
+                    <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                      {activeDoc.content}
+                    </ReactMarkdown>
+                  </div>
                 </div>
               )}
             </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center text-slate-500">
+          <div className="flex-1 flex flex-col items-center justify-center text-neutral-400">
             <BookOpen className="h-10 w-10 mb-2 opacity-40" />
             <p className="text-sm">Select a document or create a new one.</p>
           </div>

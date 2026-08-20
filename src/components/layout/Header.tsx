@@ -1,60 +1,68 @@
 import React from 'react'
 import {
-  Sparkles,
-  Search,
-  Bell,
-  Download,
-  ShieldCheck,
-  Moon,
-  Sun,
-  LayoutGrid,
+  Cloud,
+  PanelLeftOpen,
 } from 'lucide-react'
 import type { ActiveModule } from './Sidebar'
-import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/db/localDb'
 
 interface Props {
   activeModule: ActiveModule
-  onOpenCopilot: () => void
-  searchQuery: string
-  onSearchChange: (q: string) => void
+  searchQuery?: string
+  onSearchChange?: (q: string) => void
+  isSidebarCollapsed?: boolean
+  onToggleSidebar?: () => void
 }
 
 const MODULE_METADATA: Record<ActiveModule, { title: string; subtitle: string }> = {
-  documents: {
-    title: 'Documents & SOPs',
-    subtitle: 'Notion-style rich markdown workspace, store operating procedures & AI reports',
+  chat: {
+    title: 'AI Copilot & Business Intelligence',
+    subtitle: 'Ask questions, query offline ledgers, audit till logs & analyze operations',
   },
-  pos: {
-    title: 'Point of Sale & Cashier Reconciliation',
-    subtitle: 'Checkout terminal, discount overrides audit & fraud anomaly monitor',
+  documents: {
+    title: 'Documents & Knowledge Base',
+    subtitle: 'Standard operating procedures, store policies, notes & offline memos',
   },
   inventory: {
-    title: 'Warehouse & Stock Inventory',
-    subtitle: 'Stock tracking across Zone A–D with autonomous SKU distribution charts',
+    title: 'Inventory & Stock Management',
+    subtitle: 'Warehouse stock tracking across Zone A–D with real-time SKU counts',
   },
-  staff: {
-    title: 'Staff & Shift Schedulers',
-    subtitle: 'Employee directory, payroll rate calculation & weekly rota management',
+  pos: {
+    title: 'Point of Sales Terminal',
+    subtitle: 'Checkout register, fast SKU catalog, discounts & receipts',
   },
   finance: {
     title: 'Finance & P&L Analytics',
-    subtitle: 'Daily turnover, expenditure logs & gross profit variance reports',
+    subtitle: 'Revenue, expenditure turnover & overall profit margin performance',
+  },
+  sales: {
+    title: 'Sales Ledger & Audit Trail',
+    subtitle: 'Complete POS transaction records, cashier logs & override audits',
+  },
+  staff: {
+    title: 'Staff Operations & Shift Rota',
+    subtitle: 'Employee directory, hourly rates, roles & weekly rota schedule',
   },
   tasks: {
-    title: 'Kanban Task Board',
-    subtitle: 'Store action items, managerial tickets & AI-generated follow-up tasks',
+    title: 'Task Board & SOP Checklists',
+    subtitle: 'Kanban action items, priority tags & store task progression',
+  },
+  expense: {
+    title: 'Expense Management & Outflows',
+    subtitle: 'Categorized business expenditures, utility bills & wholesale restocks',
+  },
+  cashbook: {
+    title: 'Daily Cashbook & Till Reconciliation',
+    subtitle: 'Physical drawer cash count, opening float & till discrepancy audit',
   },
 }
 
 export const Header: React.FC<Props> = ({
   activeModule,
-  onOpenCopilot,
-  searchQuery,
-  onSearchChange,
+  isSidebarCollapsed = false,
+  onToggleSidebar,
 }) => {
-  const meta = MODULE_METADATA[activeModule]
-  const unreadAlerts = useLiveQuery(() => db.alerts.where('isAcknowledged').equals(0).count()) || 0
+  const meta = MODULE_METADATA[activeModule] || MODULE_METADATA.documents
 
   const handleExportBackup = async () => {
     const backupData = {
@@ -75,50 +83,43 @@ export const Header: React.FC<Props> = ({
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `bau-backup-${new Date().toISOString().split('T')[0]}.json`
+      a.download = `neurons-backup-${new Date().toISOString().split('T')[0]}.json`
       a.click()
     }
   }
 
   return (
-    <header className="h-14 border-b border-slate-800 bg-slate-950/40 px-6 flex items-center justify-between shrink-0 select-none">
-      {/* Title & Breadcrumb */}
-      <div>
-        <h2 className="text-sm font-semibold text-white tracking-tight">{meta.title}</h2>
-        <p className="text-[11px] text-slate-400 hidden sm:block truncate max-w-md">{meta.subtitle}</p>
+    <header
+      className="h-12 border-b border-neutral-200 bg-white px-4 flex items-center justify-between shrink-0 select-none pr-[144px]"
+      style={{ WebkitAppRegion: 'drag' } as any}
+    >
+      {/* Title & Sidebar Toggle */}
+      <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as any}>
+        {isSidebarCollapsed && onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            className="p-1.5 rounded-lg hover:bg-neutral-100 text-neutral-600 hover:text-neutral-900 transition-colors cursor-pointer"
+            title="Open sidebar"
+          >
+            <PanelLeftOpen className="h-4 w-4" />
+          </button>
+        )}
+        <div>
+          <h2 className="text-sm font-semibold text-neutral-900 tracking-tight leading-tight">{meta.title}</h2>
+          <p className="text-[11px] text-neutral-500 hidden sm:block truncate max-w-md leading-tight">{meta.subtitle}</p>
+        </div>
       </div>
 
-      {/* Global Actions */}
-      <div className="flex items-center gap-3">
-        {/* Search Bar */}
-        <div className="relative hidden md:block">
-          <Search className="absolute left-3 top-2.5 h-3.5 w-3.5 text-slate-500" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={(e) => onSearchChange(e.target.value)}
-            placeholder="Search records, SKUs, staff..."
-            className="h-8.5 w-56 rounded-lg bg-slate-900 border border-slate-800 pl-8 pr-3 text-xs text-slate-200 placeholder-slate-500 focus:border-emerald-500 focus:outline-none focus:ring-1 focus:ring-emerald-500 transition-all"
-          />
-        </div>
-
+      {/* Global Actions - Aligned with window controls */}
+      <div className="flex items-center h-full" style={{ WebkitAppRegion: 'no-drag' } as any}>
         {/* Export Backup */}
         <button
           onClick={handleExportBackup}
-          className="flex items-center gap-1.5 rounded-lg border border-slate-800 bg-slate-900 px-2.5 py-1.5 text-xs font-medium text-slate-300 hover:bg-slate-800 hover:text-white transition-all shadow-sm"
+          className="h-7.5 inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 hover:text-black transition-all shadow-xs cursor-pointer select-none"
           title="Export offline JSON backup"
         >
-          <Download className="h-3.5 w-3.5 text-slate-400" />
-          <span className="hidden lg:inline">Backup</span>
-        </button>
-
-        {/* Copilot Trigger */}
-        <button
-          onClick={onOpenCopilot}
-          className="flex items-center gap-1.5 rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-emerald-500 transition-all"
-        >
-          <Sparkles className="h-3.5 w-3.5 text-emerald-200 animate-pulse" />
-          <span>AI Copilot</span>
+          <Cloud className="h-3.5 w-3.5 text-neutral-500 shrink-0" />
+          <span className="hidden sm:inline leading-none">Backup</span>
         </button>
       </div>
     </header>

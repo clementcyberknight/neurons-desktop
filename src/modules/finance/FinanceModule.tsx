@@ -4,21 +4,17 @@ import { db } from '@/db/localDb'
 import type { FinanceRecord } from '@/types/database'
 import {
   TrendingUp,
-  TrendingDown,
-  DollarSign,
   Plus,
-  Sparkles,
   ArrowUpRight,
   ArrowDownRight,
-  PieChart,
-  Calendar,
+  Download,
 } from 'lucide-react'
 
 interface Props {
-  onAskAI: (prompt: string) => void
+  onAskAI?: (prompt: string) => void
 }
 
-export const FinanceModule: React.FC<Props> = ({ onAskAI }) => {
+export const FinanceModule: React.FC<Props> = () => {
   const financeRecords = useLiveQuery(() => db.finance.reverse().toArray()) || []
 
   const totalIncome = financeRecords
@@ -62,30 +58,19 @@ export const FinanceModule: React.FC<Props> = ({ onAskAI }) => {
   }
 
   return (
-    <div className="p-6 h-full flex flex-col justify-between overflow-y-auto space-y-6">
-      {/* KPI Metric Cards */}
+    <div className="p-6 h-full flex flex-col justify-between overflow-y-auto space-y-6 bg-[#fafafa]">
+      {/* Metric Cards */}
       <div>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-4">
           <div>
-            <h3 className="text-base font-bold text-white tracking-tight">Financial Overview & P&L</h3>
-            <p className="text-xs text-slate-400">Real-time local ledger turnover for current operating period</p>
+            <h3 className="text-base font-bold text-neutral-900 tracking-tight">Financial Overview & P&L</h3>
+            <p className="text-xs text-neutral-500">Real-time local ledger turnover for current operating period</p>
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() =>
-                onAskAI(
-                  'Investigate the audit logs and internal records to identify why Q3 software license costs exceeded our forecast by 25%.'
-                )
-              }
-              className="flex items-center gap-1.5 rounded-lg bg-teal-600/20 border border-teal-500/30 text-teal-400 hover:bg-teal-600 hover:text-white px-3 py-1.5 text-xs font-medium transition-all shadow-sm"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>AI P&L Variance Audit</span>
-            </button>
-            <button
               onClick={() => setShowAddModal(true)}
-              className="flex items-center gap-1.5 rounded-lg bg-teal-600 hover:bg-teal-500 text-white px-3 py-1.5 text-xs font-medium transition-all shadow-sm"
+              className="flex items-center gap-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white px-3.5 py-1.5 text-xs font-medium transition-all shadow-xs"
             >
               <Plus className="h-3.5 w-3.5" />
               <span>Add Entry</span>
@@ -95,49 +80,49 @@ export const FinanceModule: React.FC<Props> = ({ onAskAI }) => {
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           {/* Total Revenue */}
-          <div className="rounded-2xl border border-emerald-500/20 bg-emerald-950/15 p-4">
-            <div className="flex items-center justify-between text-xs font-semibold text-emerald-400">
+          <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-2xs">
+            <div className="flex items-center justify-between text-xs font-semibold text-neutral-600">
               <span>Total Revenue</span>
-              <ArrowUpRight className="h-4 w-4" />
+              <ArrowUpRight className="h-4 w-4 text-neutral-900" />
             </div>
-            <div className="mt-2 text-2xl font-bold font-mono text-white">
+            <div className="mt-2 text-2xl font-bold font-mono text-neutral-900">
               ₦{totalIncome.toLocaleString()}
             </div>
-            <span className="text-[11px] text-slate-400 font-mono mt-1 block">POS sales & wholesale</span>
+            <span className="text-[11px] text-neutral-500 mt-1 block font-mono">POS sales & wholesale</span>
           </div>
 
           {/* Total Expenses */}
-          <div className="rounded-2xl border border-red-500/20 bg-red-950/15 p-4">
-            <div className="flex items-center justify-between text-xs font-semibold text-red-400">
+          <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-2xs">
+            <div className="flex items-center justify-between text-xs font-semibold text-neutral-600">
               <span>Total Expenses</span>
-              <ArrowDownRight className="h-4 w-4" />
+              <ArrowDownRight className="h-4 w-4 text-neutral-900" />
             </div>
-            <div className="mt-2 text-2xl font-bold font-mono text-white">
+            <div className="mt-2 text-2xl font-bold font-mono text-neutral-900">
               ₦{totalExpense.toLocaleString()}
             </div>
-            <span className="text-[11px] text-slate-400 font-mono mt-1 block">Payroll, stock, licenses</span>
+            <span className="text-[11px] text-neutral-500 mt-1 block font-mono">Payroll, stock, licenses</span>
           </div>
 
           {/* Net Margin */}
-          <div className="rounded-2xl border border-teal-500/20 bg-teal-950/15 p-4">
-            <div className="flex items-center justify-between text-xs font-semibold text-teal-400">
+          <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-2xs">
+            <div className="flex items-center justify-between text-xs font-semibold text-neutral-600">
               <span>Net Profit Margin</span>
-              <TrendingUp className="h-4 w-4" />
+              <TrendingUp className="h-4 w-4 text-neutral-900" />
             </div>
-            <div className="mt-2 text-2xl font-bold font-mono text-white">
+            <div className="mt-2 text-2xl font-bold font-mono text-neutral-900">
               ₦{netProfit.toLocaleString()} ({marginPct}%)
             </div>
-            <span className="text-[11px] text-emerald-400 font-mono mt-1 block">Healthy operating margin</span>
+            <span className="text-[11px] text-neutral-500 mt-1 block font-mono">Operating net margin</span>
           </div>
         </div>
       </div>
 
       {/* Ledger Table */}
-      <div className="flex-1 rounded-2xl border border-slate-800 bg-slate-900/40 p-4 flex flex-col justify-between overflow-hidden">
+      <div className="flex-1 rounded-xl border border-neutral-200 bg-white p-4 flex flex-col justify-between overflow-hidden shadow-2xs">
         <div className="overflow-x-auto">
           <table className="w-full text-left text-xs">
             <thead>
-              <tr className="border-b border-slate-800 text-slate-400 font-mono">
+              <tr className="border-b border-neutral-200 text-neutral-500 font-mono">
                 <th className="pb-3 font-semibold">Date</th>
                 <th className="pb-3 font-semibold">Type</th>
                 <th className="pb-3 font-semibold">Category</th>
@@ -145,27 +130,25 @@ export const FinanceModule: React.FC<Props> = ({ onAskAI }) => {
                 <th className="pb-3 font-semibold text-right">Amount</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-800/60">
+            <tbody className="divide-y divide-neutral-100">
               {financeRecords.map((rec) => {
                 const isIncome = rec.type === 'income'
                 return (
-                  <tr key={rec.id} className="hover:bg-slate-800/40 transition-colors">
-                    <td className="py-2.5 font-mono text-slate-400">{rec.transactionDate}</td>
+                  <tr key={rec.id} className="hover:bg-neutral-50 transition-colors">
+                    <td className="py-2.5 font-mono text-neutral-500">{rec.transactionDate}</td>
                     <td className="py-2.5">
                       <span
                         className={`rounded px-1.5 py-0.5 text-[10px] font-bold uppercase ${
-                          isIncome ? 'bg-emerald-500/10 text-emerald-400' : 'bg-red-500/10 text-red-400'
+                          isIncome ? 'bg-neutral-100 text-neutral-900 border border-neutral-300' : 'bg-neutral-900 text-white'
                         }`}
                       >
                         {rec.type}
                       </span>
                     </td>
-                    <td className="py-2.5 font-medium text-slate-200">{rec.category}</td>
-                    <td className="py-2.5 text-slate-400 truncate max-w-xs">{rec.description}</td>
+                    <td className="py-2.5 font-medium text-neutral-900">{rec.category}</td>
+                    <td className="py-2.5 text-neutral-600 truncate max-w-xs">{rec.description}</td>
                     <td
-                      className={`py-2.5 font-mono font-bold text-right ${
-                        isIncome ? 'text-emerald-400' : 'text-red-400'
-                      }`}
+                      className="py-2.5 font-mono font-bold text-right text-neutral-900"
                     >
                       {isIncome ? '+' : '-'}₦{rec.amount.toLocaleString()}
                     </td>
@@ -179,28 +162,28 @@ export const FinanceModule: React.FC<Props> = ({ onAskAI }) => {
 
       {/* Add Modal */}
       {showAddModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4">
-          <div className="w-full max-w-md rounded-2xl border border-slate-800 bg-slate-900 p-6 shadow-2xl">
-            <h3 className="text-sm font-bold text-white mb-4">Add Financial Record</h3>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl border border-neutral-200 bg-white p-6 shadow-xl">
+            <h3 className="text-sm font-bold text-neutral-900 mb-4">Add Financial Record</h3>
             <form onSubmit={handleAddRecord} className="space-y-3 text-xs">
               <div className="grid grid-cols-2 gap-2">
                 <div>
-                  <label className="text-slate-400">Type</label>
+                  <label className="text-neutral-600">Type</label>
                   <select
                     value={newEntry.type}
                     onChange={(e) => setNewEntry({ ...newEntry, type: e.target.value as any })}
-                    className="w-full rounded-lg bg-slate-800 border border-slate-700 p-2 text-white mt-1"
+                    className="w-full rounded-lg bg-neutral-50 border border-neutral-300 p-2 text-neutral-900 mt-1 focus:outline-none focus:border-neutral-500"
                   >
                     <option value="income">Income</option>
                     <option value="expense">Expense</option>
                   </select>
                 </div>
                 <div>
-                  <label className="text-slate-400">Category</label>
+                  <label className="text-neutral-600">Category</label>
                   <select
                     value={newEntry.category}
                     onChange={(e) => setNewEntry({ ...newEntry, category: e.target.value as any })}
-                    className="w-full rounded-lg bg-slate-800 border border-slate-700 p-2 text-white mt-1"
+                    className="w-full rounded-lg bg-neutral-50 border border-neutral-300 p-2 text-neutral-900 mt-1 focus:outline-none focus:border-neutral-500"
                   >
                     <option value="POS Sales">POS Sales</option>
                     <option value="Wholesale">Wholesale</option>
@@ -212,37 +195,37 @@ export const FinanceModule: React.FC<Props> = ({ onAskAI }) => {
                 </div>
               </div>
               <div>
-                <label className="text-slate-400">Description</label>
+                <label className="text-neutral-600">Description</label>
                 <input
                   type="text"
                   required
                   value={newEntry.description}
                   onChange={(e) => setNewEntry({ ...newEntry, description: e.target.value })}
                   placeholder="e.g. Monthly cloud backup & software license"
-                  className="w-full rounded-lg bg-slate-800 border border-slate-700 p-2 text-white mt-1"
+                  className="w-full rounded-lg bg-neutral-50 border border-neutral-300 p-2 text-neutral-900 mt-1 focus:outline-none focus:border-neutral-500"
                 />
               </div>
               <div>
-                <label className="text-slate-400">Amount (₦)</label>
+                <label className="text-neutral-600">Amount (₦)</label>
                 <input
                   type="number"
                   required
                   value={newEntry.amount}
                   onChange={(e) => setNewEntry({ ...newEntry, amount: Number(e.target.value) })}
-                  className="w-full rounded-lg bg-slate-800 border border-slate-700 p-2 text-white mt-1 font-mono"
+                  className="w-full rounded-lg bg-neutral-50 border border-neutral-300 p-2 text-neutral-900 mt-1 font-mono focus:outline-none focus:border-neutral-500"
                 />
               </div>
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-800 mt-4">
+              <div className="flex justify-end gap-2 pt-3 border-t border-neutral-200 mt-4">
                 <button
                   type="button"
                   onClick={() => setShowAddModal(false)}
-                  className="rounded-lg px-3 py-1.5 text-slate-400 hover:bg-slate-800"
+                  className="rounded-lg px-3 py-1.5 text-neutral-600 hover:bg-neutral-100"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="rounded-lg bg-teal-600 hover:bg-teal-500 px-4 py-1.5 text-white font-medium shadow-sm"
+                  className="rounded-lg bg-black hover:bg-neutral-800 px-4 py-1.5 text-white font-medium shadow-xs"
                 >
                   Save Record
                 </button>

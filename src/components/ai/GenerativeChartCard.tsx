@@ -1,7 +1,6 @@
 import React from 'react'
-import { BarChart3, PieChart, TrendingUp, Check, Plus } from 'lucide-react'
+import { BarChart3, PieChart, Check, Plus } from 'lucide-react'
 import type { GenerativeChartSchema } from '@/types/schemas'
-import { db } from '@/db/localDb'
 
 interface Props {
   data: GenerativeChartSchema
@@ -31,15 +30,15 @@ export const GenerativeChartCard: React.FC<Props> = ({ data, onApply }) => {
   }
 
   return (
-    <div className="rounded-xl border border-slate-800 bg-slate-900/90 p-4 shadow-lg text-slate-100 my-2">
-      <div className="flex items-center justify-between border-b border-slate-800 pb-3 mb-3">
+    <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-2xs text-neutral-900 my-2">
+      <div className="flex items-center justify-between border-b border-neutral-100 pb-3 mb-3">
         <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-400">
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-neutral-100 text-neutral-800">
             {data.chart_type === 'pie' ? <PieChart className="h-4 w-4" /> : <BarChart3 className="h-4 w-4" />}
           </div>
           <div>
-            <h4 className="text-sm font-semibold tracking-tight">{data.title}</h4>
-            <span className="text-xs text-slate-400 uppercase font-mono">{data.chart_type} Chart • {dataset.label}</span>
+            <h4 className="text-sm font-semibold tracking-tight text-neutral-900">{data.title}</h4>
+            <span className="text-xs text-neutral-500 uppercase font-mono">{data.chart_type} Chart • {dataset.label}</span>
           </div>
         </div>
         <button
@@ -47,8 +46,8 @@ export const GenerativeChartCard: React.FC<Props> = ({ data, onApply }) => {
           disabled={applied}
           className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium transition-all ${
             applied
-              ? 'bg-emerald-500/20 text-emerald-400'
-              : 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-sm'
+              ? 'bg-neutral-100 text-neutral-800'
+              : 'bg-black hover:bg-neutral-800 text-white shadow-xs'
           }`}
         >
           {applied ? <Check className="h-3.5 w-3.5" /> : <Plus className="h-3.5 w-3.5" />}
@@ -65,10 +64,10 @@ export const GenerativeChartCard: React.FC<Props> = ({ data, onApply }) => {
           return (
             <div key={label} className="space-y-1">
               <div className="flex justify-between text-xs">
-                <span className="text-slate-300 font-medium">{label}</span>
-                <span className="font-mono text-slate-400">{val.toLocaleString()} units ({pct}%)</span>
+                <span className="text-neutral-700 font-medium">{label}</span>
+                <span className="font-mono text-neutral-500">{val.toLocaleString()} units ({pct}%)</span>
               </div>
-              <div className="h-2.5 w-full rounded-full bg-slate-800 overflow-hidden">
+              <div className="h-2.5 w-full rounded-full bg-neutral-100 overflow-hidden">
                 <div
                   className="h-full rounded-full transition-all duration-700 ease-out"
                   style={{ width: `${pct}%`, backgroundColor: color }}
@@ -81,8 +80,8 @@ export const GenerativeChartCard: React.FC<Props> = ({ data, onApply }) => {
 
       {/* AI Summary */}
       {data.summary && (
-        <div className="mt-3 rounded-lg bg-slate-800/60 p-2.5 text-xs text-slate-300 leading-relaxed border border-slate-700/50">
-          <span className="font-semibold text-emerald-400">Insight: </span>
+        <div className="mt-3 rounded-lg bg-neutral-50 p-2.5 text-xs text-neutral-700 leading-relaxed border border-neutral-200">
+          <span className="font-semibold text-neutral-900">Insight: </span>
           {data.summary}
         </div>
       )}

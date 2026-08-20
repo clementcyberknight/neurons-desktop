@@ -19,11 +19,11 @@ function createWindow() {
     minWidth: 1080,
     minHeight: 700,
     title: 'BAU Copilot — Offline Business OS',
-    backgroundColor: '#090d16',
+    backgroundColor: '#ffffff',
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#0d1322',
-      symbolColor: '#94a3b8',
+      color: '#ffffff',
+      symbolColor: '#171717',
       height: 38,
     },
     webPreferences: {

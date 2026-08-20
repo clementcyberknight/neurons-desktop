@@ -4,32 +4,26 @@ import { db } from '@/db/localDb'
 import type { POSTransaction, InventoryItem } from '@/types/database'
 import {
   CreditCard,
-  Plus,
   Trash2,
-  ShieldAlert,
-  CheckCircle2,
   AlertTriangle,
-  Receipt,
-  Sparkles,
   ShoppingBag,
 } from 'lucide-react'
 import confetti from 'canvas-confetti'
 
 interface Props {
-  onAskAI: (prompt: string) => void
+  onAskAI?: (prompt: string) => void
 }
 
-export const PosModule: React.FC<Props> = ({ onAskAI }) => {
+export const PosModule: React.FC<Props> = () => {
   const inventory = useLiveQuery(() => db.inventory.toArray()) || []
   const transactions = useLiveQuery(() => db.transactions.reverse().toArray()) || []
-  const alerts = useLiveQuery(() => db.alerts.toArray()) || []
 
   // Current Cart State
   const [cart, setCart] = useState<{ item: InventoryItem; quantity: number }[]>([])
   const [discountPercent, setDiscountPercent] = useState(0)
   const [overrideReason, setOverrideReason] = useState('')
   const [paymentMethod, setPaymentMethod] = useState<POSTransaction['paymentMethod']>('card')
-  const [cashierId, setCashierId] = useState('POS_04')
+  const [cashierId] = useState('POS_04')
 
   const subtotal = cart.reduce((acc, curr) => acc + curr.item.unitPrice * curr.quantity, 0)
   const discountAmount = Math.round(subtotal * (discountPercent / 100))
@@ -110,9 +104,8 @@ export const PosModule: React.FC<Props> = ({ onAskAI }) => {
       synced: 0,
     })
 
-    // Confetti celebration if normal transaction
     if (!isOverride) {
-      confetti({ particleCount: 60, spread: 50, origin: { y: 0.8 } })
+      confetti({ particleCount: 50, spread: 50, origin: { y: 0.8 } })
     }
 
     setCart([])
@@ -121,16 +114,16 @@ export const PosModule: React.FC<Props> = ({ onAskAI }) => {
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 h-full overflow-hidden">
+    <div className="grid grid-cols-1 lg:grid-cols-12 h-full overflow-hidden bg-white">
       {/* Left 7 Cols: Catalog & Cart Terminal */}
-      <div className="lg:col-span-7 border-r border-slate-800 p-6 flex flex-col justify-between overflow-y-auto bg-slate-950/20">
+      <div className="lg:col-span-7 border-r border-neutral-200 p-6 flex flex-col justify-between overflow-y-auto bg-[#fafafa]">
         <div>
           {/* Quick Product Grid */}
           <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono flex items-center gap-1.5">
-              <ShoppingBag className="h-4 w-4 text-emerald-400" /> Fast SKU Catalog
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 font-mono flex items-center gap-1.5">
+              <ShoppingBag className="h-4 w-4 text-neutral-800" /> Fast SKU Catalog
             </h3>
-            <span className="text-xs text-slate-400">{inventory.length} active items</span>
+            <span className="text-xs text-neutral-500">{inventory.length} active items</span>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-6">
@@ -138,19 +131,19 @@ export const PosModule: React.FC<Props> = ({ onAskAI }) => {
               <button
                 key={item.id}
                 onClick={() => handleAddToCart(item)}
-                className="group flex flex-col justify-between rounded-xl border border-slate-800 bg-slate-900/60 p-3 text-left hover:border-emerald-500/50 hover:bg-slate-800/80 transition-all shadow-sm"
+                className="group flex flex-col justify-between rounded-xl border border-neutral-200 bg-white p-3 text-left hover:border-neutral-400 transition-all shadow-2xs cursor-pointer"
               >
                 <div>
-                  <span className="text-[10px] font-mono text-slate-500 uppercase">{item.zone}</span>
-                  <h4 className="text-xs font-semibold text-slate-200 group-hover:text-white line-clamp-2 mt-0.5">
+                  <span className="text-[10px] font-mono text-neutral-500 uppercase">{item.zone}</span>
+                  <h4 className="text-xs font-semibold text-neutral-900 line-clamp-2 mt-0.5">
                     {item.name}
                   </h4>
                 </div>
                 <div className="mt-3 flex items-center justify-between">
-                  <span className="font-mono text-xs font-bold text-emerald-400">
+                  <span className="font-mono text-xs font-bold text-neutral-900">
                     ₦{item.unitPrice.toLocaleString()}
                   </span>
-                  <span className="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded">
+                  <span className="text-[10px] text-neutral-600 bg-neutral-100 px-1.5 py-0.5 rounded border border-neutral-200">
                     Stock: {item.quantity}
                   </span>
                 </div>
@@ -159,33 +152,33 @@ export const PosModule: React.FC<Props> = ({ onAskAI }) => {
           </div>
 
           {/* Active Cart */}
-          <div className="rounded-2xl border border-slate-800 bg-slate-900/40 p-4">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono mb-3 flex items-center justify-between">
+          <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-2xs">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 font-mono mb-3 flex items-center justify-between">
               <span>Checkout Register Cart</span>
-              <span>{cart.length} items</span>
+              <span className="text-neutral-700">{cart.length} items</span>
             </h3>
 
             {cart.length === 0 ? (
-              <div className="py-8 text-center text-slate-500 text-xs">
+              <div className="py-8 text-center text-neutral-400 text-xs">
                 Cart is empty. Click SKU catalog items above to add.
               </div>
             ) : (
-              <div className="divide-y divide-slate-800/60 max-h-48 overflow-y-auto mb-4">
+              <div className="divide-y divide-neutral-100 max-h-48 overflow-y-auto mb-4">
                 {cart.map(({ item, quantity }) => (
                   <div key={item.id} className="py-2 flex items-center justify-between text-xs">
                     <div className="truncate max-w-[200px]">
-                      <p className="font-medium text-slate-200 truncate">{item.name}</p>
-                      <span className="text-[10px] text-slate-500 font-mono">
+                      <p className="font-medium text-neutral-900 truncate">{item.name}</p>
+                      <span className="text-[10px] text-neutral-500 font-mono">
                         ₦{item.unitPrice.toLocaleString()} × {quantity}
                       </span>
                     </div>
                     <div className="flex items-center gap-3">
-                      <span className="font-mono font-semibold text-white">
+                      <span className="font-mono font-semibold text-neutral-900">
                         ₦{(item.unitPrice * quantity).toLocaleString()}
                       </span>
                       <button
                         onClick={() => handleRemoveFromCart(item.id)}
-                        className="text-slate-500 hover:text-red-400"
+                        className="text-neutral-400 hover:text-red-600 p-1"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -196,14 +189,14 @@ export const PosModule: React.FC<Props> = ({ onAskAI }) => {
             )}
 
             {/* Calculations & Discounts */}
-            <div className="space-y-2 border-t border-slate-800 pt-3 text-xs">
-              <div className="flex justify-between text-slate-400">
+            <div className="space-y-2 border-t border-neutral-200 pt-3 text-xs">
+              <div className="flex justify-between text-neutral-600">
                 <span>Subtotal</span>
                 <span className="font-mono">₦{subtotal.toLocaleString()}</span>
               </div>
 
               <div className="flex items-center justify-between">
-                <span className="text-slate-400">Discount Override (%):</span>
+                <span className="text-neutral-600">Discount Override (%):</span>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
@@ -211,10 +204,10 @@ export const PosModule: React.FC<Props> = ({ onAskAI }) => {
                     max={100}
                     value={discountPercent}
                     onChange={(e) => setDiscountPercent(Number(e.target.value))}
-                    className="w-16 rounded bg-slate-800 border border-slate-700 px-2 py-1 text-right font-mono text-slate-200 text-xs"
+                    className="w-16 rounded bg-neutral-50 border border-neutral-300 px-2 py-1 text-right font-mono text-neutral-900 text-xs focus:outline-none"
                   />
                   {discountPercent > 15 && (
-                    <span className="text-[10px] font-bold text-red-400 flex items-center gap-0.5">
+                    <span className="text-[10px] font-bold text-red-600 flex items-center gap-0.5">
                       <AlertTriangle className="h-3 w-3" /> Flagged
                     </span>
                   )}
@@ -227,20 +220,20 @@ export const PosModule: React.FC<Props> = ({ onAskAI }) => {
                   placeholder="Override authorization reason..."
                   value={overrideReason}
                   onChange={(e) => setOverrideReason(e.target.value)}
-                  className="w-full rounded bg-slate-800 border border-red-500/40 px-2.5 py-1.5 text-xs text-red-200 placeholder-red-400/50"
+                  className="w-full rounded bg-neutral-50 border border-neutral-300 px-2.5 py-1.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none"
                 />
               )}
 
-              <div className="flex justify-between text-sm font-bold text-white pt-2 border-t border-slate-800">
+              <div className="flex justify-between text-sm font-bold text-neutral-900 pt-2 border-t border-neutral-200">
                 <span>Total Due</span>
-                <span className="font-mono text-emerald-400">₦{total.toLocaleString()}</span>
+                <span className="font-mono">₦{total.toLocaleString()}</span>
               </div>
             </div>
 
             <button
               onClick={handleCheckout}
               disabled={cart.length === 0}
-              className="mt-4 w-full rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 text-white font-semibold py-2.5 text-xs shadow-md transition-all flex items-center justify-center gap-2"
+              className="mt-4 w-full rounded-xl bg-black hover:bg-neutral-800 disabled:opacity-40 text-white font-semibold py-2.5 text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
               <CreditCard className="h-4 w-4" />
               <span>Complete Sale (₦{total.toLocaleString()})</span>
@@ -250,63 +243,36 @@ export const PosModule: React.FC<Props> = ({ onAskAI }) => {
       </div>
 
       {/* Right 5 Cols: Audit Log & Security Anomalies */}
-      <div className="lg:col-span-5 p-6 flex flex-col justify-between overflow-y-auto bg-slate-950/40">
+      <div className="lg:col-span-5 p-6 flex flex-col justify-between overflow-y-auto bg-white">
         <div>
-          {/* Security AI Audit Helper */}
-          <div className="mb-4 rounded-xl border border-red-500/20 bg-red-950/20 p-3">
-            <div className="flex items-center justify-between mb-1.5">
-              <div className="flex items-center gap-1.5 text-xs font-semibold text-red-300">
-                <ShieldAlert className="h-3.5 w-3.5 text-red-400" />
-                <span>POS Anomaly Detector</span>
-              </div>
-              <span className="text-[10px] font-mono text-red-400 bg-red-950 px-1.5 py-0.5 rounded border border-red-800">
-                Real-Time
-              </span>
-            </div>
-            <p className="text-[11px] text-slate-400 mb-2.5">
-              Instantly audit cashier overrides or test the fine-tuned model against transaction TXN_8820.
-            </p>
-            <button
-              onClick={() =>
-                onAskAI(
-                  'Alert management: Cashier #104 processed an unauthorized 80% discount on transaction TXN_8820 without manager approval.'
-                )
-              }
-              className="w-full rounded-lg bg-red-600/80 hover:bg-red-600 text-white text-xs font-medium py-1.5 transition-all shadow-sm flex items-center justify-center gap-1.5"
-            >
-              <Sparkles className="h-3.5 w-3.5" />
-              <span>Run AI Audit on TXN_8820</span>
-            </button>
-          </div>
-
           {/* Recent Transaction Ledger */}
-          <div className="flex items-center justify-between mb-2">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 font-mono">
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 font-mono">
               Live Transaction Ledger ({transactions.length})
             </h3>
           </div>
 
           <div className="space-y-2">
-            {transactions.slice(0, 6).map((txn) => (
+            {transactions.slice(0, 8).map((txn) => (
               <div
                 key={txn.id}
                 className={`rounded-xl border p-3 text-xs transition-all ${
                   txn.status === 'flagged'
-                    ? 'border-red-500/40 bg-red-950/20 text-red-200'
-                    : 'border-slate-800 bg-slate-900/50 text-slate-300'
+                    ? 'border-neutral-300 bg-neutral-50 text-neutral-900'
+                    : 'border-neutral-200 bg-white text-neutral-800 shadow-2xs'
                 }`}
               >
                 <div className="flex items-center justify-between font-mono">
-                  <span className="font-semibold text-white">{txn.receiptNumber}</span>
-                  <span className="font-bold text-emerald-400">₦{txn.totalAmount.toLocaleString()}</span>
+                  <span className="font-semibold text-neutral-900">{txn.receiptNumber}</span>
+                  <span className="font-bold text-neutral-900">₦{txn.totalAmount.toLocaleString()}</span>
                 </div>
-                <div className="mt-1 flex items-center justify-between text-[11px] text-slate-400">
+                <div className="mt-1 flex items-center justify-between text-[11px] text-neutral-500">
                   <span>{txn.cashierName} • {txn.paymentMethod}</span>
                   <span>{new Date(txn.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
                 </div>
                 {txn.hasManualOverride && (
-                  <div className="mt-2 rounded bg-black/40 px-2 py-1 text-[10px] text-red-300 border border-red-500/20 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3 text-red-400 shrink-0" />
+                  <div className="mt-2 rounded bg-neutral-100 px-2 py-1 text-[10px] text-neutral-700 border border-neutral-200 flex items-center gap-1">
+                    <AlertTriangle className="h-3 w-3 text-neutral-700 shrink-0" />
                     <span className="truncate">Override ({txn.discountPercent}%): {txn.overrideReason}</span>
                   </div>
                 )}
