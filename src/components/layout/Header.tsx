@@ -22,8 +22,8 @@ const MODULE_METADATA: Record<ActiveModule, { title: string; subtitle: string }>
     subtitle: 'Ask questions, query offline ledgers, audit till logs & analyze operations',
   },
   documents: {
-    title: 'Documents & Knowledge Base',
-    subtitle: 'Standard operating procedures, store policies, notes & offline memos',
+    title: 'Documents & Word Processor',
+    subtitle: 'Standard operating procedures, store policies, contracts, reports & paginated docs',
   },
   inventory: {
     title: 'Inventory & Stock Management',

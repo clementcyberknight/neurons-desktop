@@ -1,43 +1,251 @@
-import React, { useState } from 'react'
+import React, { useState, useEffect, useMemo, useRef } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/db/localDb'
 import type { POSTransaction, InventoryItem } from '@/types/database'
 import {
-  CreditCard,
+  ShoppingCart,
   Trash2,
-  AlertTriangle,
-  ShoppingBag,
+  AlertCircle,
+  CreditCard,
+  Banknote,
+  ArrowLeftRight,
+  Wallet,
+  Layers,
+  Lock,
+  Unlock,
+  Zap,
+  Filter,
+  CornerDownLeft,
+  Barcode,
+  CheckCircle2,
+  Printer,
+  X,
+  Plus,
+  Minus,
+  Clock,
+  Check,
+  Building,
+  RotateCcw,
+  UserCheck,
+  FileSpreadsheet,
+  FileCheck,
 } from 'lucide-react'
 import confetti from 'canvas-confetti'
 
 interface Props {
+  searchQuery?: string
   onAskAI?: (prompt: string) => void
 }
 
+// Fallback seed catalog for Wholesale & Production POS
+const SEED_POS_PRODUCTS: Omit<InventoryItem, 'createdAt' | 'updatedAt' | 'synced'>[] = [
+  { id: 'pos-1', sku: 'AQU-GAL-01', name: 'Aqua Marine', category: 'Gallon', unit: 'Gallons', quantity: 0, minThreshold: 10, unitPrice: 3700, costPrice: 2800, zone: 'Zone A', lastRestocked: Date.now(), type: 'Finished Good' },
+  { id: 'pos-2', sku: 'ARM-GAL-01', name: 'Army Green', category: 'Gallon', unit: 'Gallons', quantity: 0, minThreshold: 10, unitPrice: 3700, costPrice: 2800, zone: 'Zone A', lastRestocked: Date.now(), type: 'Finished Good' },
+  { id: 'pos-3', sku: 'ARM-DRM-01', name: 'Army Green', category: 'Drum', unit: 'Drums', quantity: 60, minThreshold: 15, unitPrice: 16000, costPrice: 11500, zone: 'Zone A', lastRestocked: Date.now(), type: 'Finished Good' },
+  { id: 'pos-4', sku: 'ASH-GAL-01', name: 'Ash Grey 9096', category: 'Gallon', unit: 'Gallons', quantity: 5, minThreshold: 10, unitPrice: 3700, costPrice: 2800, zone: 'Zone A', lastRestocked: Date.now(), type: 'Finished Good' },
+  { id: 'pos-5', sku: 'ASH-DRM-01', name: 'Ash Grey 9096', category: 'Drum', unit: 'Drums', quantity: 14, minThreshold: 10, unitPrice: 13000, costPrice: 9500, zone: 'Zone A', lastRestocked: Date.now(), type: 'Finished Good' },
+  { id: 'pos-6', sku: 'BEI-DRM-01', name: 'Beige', category: 'Drum', unit: 'Drums', quantity: 0, minThreshold: 10, unitPrice: 70000, costPrice: 52000, zone: 'Zone A', lastRestocked: Date.now(), type: 'Finished Good' },
+  { id: 'pos-7', sku: 'BEI-DRM-02', name: 'Beige', category: 'Drum', unit: 'Drums', quantity: 0, minThreshold: 10, unitPrice: 35000, costPrice: 26000, zone: 'Zone A', lastRestocked: Date.now(), type: 'Finished Good' },
+  { id: 'pos-8', sku: 'BEI-GAL-01', name: 'Beige (1734)', category: 'Gallon', unit: 'Gallons', quantity: 0, minThreshold: 10, unitPrice: 3700, costPrice: 2800, zone: 'Zone A', lastRestocked: Date.now(), type: 'Finished Good' },
+  { id: 'pos-9', sku: 'BEI-DRM-03', name: 'Beige (1734)', category: 'Drum', unit: 'Drums', quantity: 83, minThreshold: 20, unitPrice: 13000, costPrice: 9500, zone: 'Zone A', lastRestocked: Date.now(), type: 'Finished Good' },
+  { id: 'pos-10', sku: 'BLK-DRM-01', name: 'Black', category: 'Drum', unit: 'Drums', quantity: 50, minThreshold: 15, unitPrice: 15000, costPrice: 10500, zone: 'Zone A', lastRestocked: Date.now(), type: 'Finished Good' },
+  { id: 'pos-11', sku: 'BLK-GAL-01', name: 'Black', category: 'Gallon', unit: 'Gallons', quantity: 135, minThreshold: 20, unitPrice: 4300, costPrice: 3100, zone: 'Zone A', lastRestocked: Date.now(), type: 'Finished Good' },
+  { id: 'pos-12', sku: 'BLU-DRM-01', name: 'Brilliant Blue Drum (0012)', category: 'Drum', unit: 'Drums', quantity: 38, minThreshold: 10, unitPrice: 14000, costPrice: 10000, zone: 'Zone A', lastRestocked: Date.now(), type: 'Finished Good' },
+]
+
+// Radial 12-segment color wheel icon matching the screenshot
+const ColorWheelIcon: React.FC<{ className?: string }> = ({ className = 'h-14 w-14' }) => (
+  <svg viewBox="0 0 100 100" className={className}>
+    <circle cx="50" cy="50" r="46" fill="#f8fafc" />
+    <path d="M50 50 L50 4 A46 46 0 0 1 73 10 Z" fill="#ef4444" />
+    <path d="M50 50 L73 10 A46 46 0 0 1 90 27 Z" fill="#f97316" />
+    <path d="M50 50 L90 27 A46 46 0 0 1 96 50 Z" fill="#facc15" />
+    <path d="M50 50 L96 50 A46 46 0 0 1 90 73 Z" fill="#84cc16" />
+    <path d="M50 50 L90 73 A46 46 0 0 1 73 90 Z" fill="#10b981" />
+    <path d="M50 50 L73 90 A46 46 0 0 1 50 96 Z" fill="#06b6d4" />
+    <path d="M50 50 L50 96 A46 46 0 0 1 27 90 Z" fill="#3b82f6" />
+    <path d="M50 50 L27 90 A46 46 0 0 1 10 73 Z" fill="#6366f1" />
+    <path d="M50 50 L10 73 A46 46 0 0 1 4 50 Z" fill="#8b5cf6" />
+    <path d="M50 50 L4 50 A46 46 0 0 1 10 27 Z" fill="#d946ef" />
+    <path d="M50 50 L10 27 A46 46 0 0 1 27 10 Z" fill="#ec4899" />
+    <path d="M50 50 L27 10 A46 46 0 0 1 50 4 Z" fill="#f43f5e" />
+    <circle cx="50" cy="50" r="14" fill="#ffffff" />
+  </svg>
+)
+
 export const PosModule: React.FC<Props> = () => {
-  const inventory = useLiveQuery(() => db.inventory.toArray()) || []
-  const transactions = useLiveQuery(() => db.transactions.reverse().toArray()) || []
+  const liveInventory = useLiveQuery(() => db.inventory.toArray()) || []
 
-  // Current Cart State
+  // Auto seed production paints if DB is fresh
+  useEffect(() => {
+    const seedIfNeeded = async () => {
+      const count = await db.inventory.count()
+      if (count === 0) {
+        const now = Date.now()
+        for (const item of SEED_POS_PRODUCTS) {
+          await db.inventory.add({
+            ...item,
+            createdAt: now,
+            updatedAt: now,
+            synced: 0,
+          })
+        }
+      }
+    }
+    seedIfNeeded()
+  }, [])
+
+  const inventory = liveInventory.length > 0 ? liveInventory : (SEED_POS_PRODUCTS as InventoryItem[])
+
+  // 1. Shift Lifecycle State
+  const [isShiftActive, setIsShiftActive] = useState<boolean>(false)
+  const [showStartShiftModal, setShowStartShiftModal] = useState<boolean>(false)
+  const [cashierName, setCashierName] = useState('Akhimien Clement')
+  const [posStation, setPosStation] = useState('Terminal POS #01')
+  const [shiftStartTime, setShiftStartTime] = useState<string>('')
+  const [shiftStartTimestamp, setShiftStartTimestamp] = useState<number>(0)
+
+  // Running Shift Totals
+  const [shiftStats, setShiftStats] = useState({
+    cashSales: 0,
+    transferSales: 0,
+    cardSales: 0,
+    creditSales: 0,
+    totalSales: 0,
+    txnCount: 0,
+  })
+
+  // 2. POS Catalog & Cart State
+  const [searchTerm, setSearchTerm] = useState('')
+  const [selectedCategory, setSelectedCategory] = useState<string>('All')
   const [cart, setCart] = useState<{ item: InventoryItem; quantity: number }[]>([])
-  const [discountPercent, setDiscountPercent] = useState(0)
-  const [overrideReason, setOverrideReason] = useState('')
-  const [paymentMethod, setPaymentMethod] = useState<POSTransaction['paymentMethod']>('card')
-  const [cashierId] = useState('POS_04')
+  const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Transfer' | 'Card' | 'Store Credit' | 'Split'>('Cash')
 
+  // In-App Toast Notification Banner (No Browser Alerts)
+  const [toastMessage, setToastMessage] = useState<string | null>(null)
+  const showToast = (msg: string) => {
+    setToastMessage(msg)
+    setTimeout(() => setToastMessage(null), 3500)
+  }
+
+  // Modals
+  const [showReceiptModal, setShowReceiptModal] = useState(false)
+  const [completedTxn, setCompletedTxn] = useState<POSTransaction | null>(null)
+  const [showCloseShiftModal, setShowCloseShiftModal] = useState(false)
+  const [showZReportModal, setShowZReportModal] = useState(false)
+  const [closedShiftSummary, setClosedShiftSummary] = useState<any>(null)
+  const [actualCashCounted, setActualCashCounted] = useState<number>(0)
+  const [showSplitModal, setShowSplitModal] = useState(false)
+  const [splitDetails, setSplitDetails] = useState({ cash: 0, transfer: 0, card: 0 })
+
+  const searchInputRef = useRef<HTMLInputElement>(null)
+
+  // Categories extraction
+  const categories = useMemo(() => {
+    const set = new Set<string>(['All'])
+    inventory.forEach((i) => {
+      if (i.category) set.add(i.category)
+    })
+    set.add('Gallon')
+    set.add('Drum')
+    return Array.from(set)
+  }, [inventory])
+
+  // Filtered Products
+  const filteredProducts = useMemo(() => {
+    let list = [...inventory]
+    const q = searchTerm.trim().toLowerCase()
+
+    if (q) {
+      list = list.filter(
+        (i) =>
+          i.name.toLowerCase().includes(q) ||
+          i.sku.toLowerCase().includes(q) ||
+          (i.brand && i.brand.toLowerCase().includes(q))
+      )
+    }
+
+    if (selectedCategory !== 'All') {
+      list = list.filter(
+        (i) =>
+          (i.category && i.category.toLowerCase() === selectedCategory.toLowerCase()) ||
+          (i.unit && i.unit.toLowerCase().includes(selectedCategory.toLowerCase()))
+      )
+    }
+
+    return list
+  }, [inventory, searchTerm, selectedCategory])
+
+  // Cart Calculations
   const subtotal = cart.reduce((acc, curr) => acc + curr.item.unitPrice * curr.quantity, 0)
-  const discountAmount = Math.round(subtotal * (discountPercent / 100))
-  const total = subtotal - discountAmount
+  const total = subtotal
+  const totalCartCount = cart.reduce((acc, curr) => acc + curr.quantity, 0)
 
+  // Start Shift Execution
+  const handleStartShift = (e: React.FormEvent) => {
+    e.preventDefault()
+    const now = Date.now()
+    const timeStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    setShiftStartTime(timeStr)
+    setShiftStartTimestamp(now)
+    setIsShiftActive(true)
+    setShowStartShiftModal(false)
+    setActualCashCounted(0)
+    setShiftStats({
+      cashSales: 0,
+      transferSales: 0,
+      cardSales: 0,
+      creditSales: 0,
+      totalSales: 0,
+      txnCount: 0,
+    })
+    showToast(`Shift opened successfully for ${cashierName}. Register unlocked.`)
+  }
+
+  // Add or increment item (requires active shift)
   const handleAddToCart = (item: InventoryItem) => {
+    if (!isShiftActive) {
+      setShowStartShiftModal(true)
+      return
+    }
+
+    if (item.quantity <= 0) {
+      showToast(`"${item.name}" is OUT OF STOCK. Please restock in inventory.`)
+      return
+    }
+
     setCart((prev) => {
-      const existing = prev.find((c) => c.item.id === item.id)
-      if (existing) {
-        return prev.map((c) =>
-          c.item.id === item.id ? { ...c, quantity: c.quantity + 1 } : c
-        )
+      const existingIndex = prev.findIndex((c) => c.item.id === item.id)
+      if (existingIndex >= 0) {
+        const curr = prev[existingIndex]
+        if (curr.quantity >= item.quantity) {
+          showToast(`Cannot add more. Only ${item.quantity} units available in stock.`)
+          return prev
+        }
+        const updated = [...prev]
+        updated[existingIndex] = { ...curr, quantity: curr.quantity + 1 }
+        return updated
       }
       return [...prev, { item, quantity: 1 }]
+    })
+  }
+
+  // Update item quantity in cart
+  const handleUpdateQty = (itemId: string, delta: number) => {
+    setCart((prev) => {
+      return prev
+        .map((c) => {
+          if (c.item.id === itemId) {
+            const nextQty = c.quantity + delta
+            if (nextQty > c.item.quantity) {
+              showToast(`Maximum available stock is ${c.item.quantity} units.`)
+              return c
+            }
+            return { ...c, quantity: nextQty }
+          }
+          return c
+        })
+        .filter((c) => c.quantity > 0)
     })
   }
 
@@ -45,19 +253,51 @@ export const PosModule: React.FC<Props> = () => {
     setCart((prev) => prev.filter((c) => c.item.id !== itemId))
   }
 
+  const handleClearCart = () => {
+    if (cart.length === 0) return
+    setCart([])
+  }
+
+  // Barcode / Enter Handler
+  const handleBarcodeSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!isShiftActive) {
+      setShowStartShiftModal(true)
+      return
+    }
+    if (!searchTerm.trim()) return
+
+    const match = inventory.find(
+      (i) =>
+        i.sku.toLowerCase() === searchTerm.trim().toLowerCase() ||
+        i.name.toLowerCase() === searchTerm.trim().toLowerCase()
+    )
+
+    if (match) {
+      handleAddToCart(match)
+      setSearchTerm('')
+    } else {
+      showToast(`No product found matching "${searchTerm}".`)
+    }
+  }
+
+  // Checkout Execution
   const handleCheckout = async () => {
+    if (!isShiftActive) {
+      setShowStartShiftModal(true)
+      return
+    }
     if (cart.length === 0) return
 
     const now = Date.now()
-    const isOverride = discountPercent > 15
-    const receiptNum = `REC-${new Date().getFullYear()}-${Math.floor(1000 + Math.random() * 9000)}`
+    const receiptNum = `REC-${new Date().getFullYear()}-${Math.floor(10000 + Math.random() * 90000)}`
 
     const newTxn: POSTransaction = {
       id: `txn-${now}`,
       receiptNumber: receiptNum,
-      cashierId,
-      cashierName: cashierId === 'POS_04' ? 'Cashier ID #104' : 'Cashier ID #101',
-      posStation: 'POS Station 1',
+      cashierId: 'CASHIER_01',
+      cashierName: cashierName,
+      posStation: posStation,
       items: cart.map((c) => ({
         sku: c.item.sku,
         name: c.item.name,
@@ -66,221 +306,887 @@ export const PosModule: React.FC<Props> = () => {
         subtotal: c.item.unitPrice * c.quantity,
       })),
       subtotal,
-      discountPercent,
-      discountAmount,
+      discountPercent: 0,
+      discountAmount: 0,
       totalAmount: total,
-      paymentMethod,
-      hasManualOverride: isOverride,
-      overrideReason: isOverride ? overrideReason || 'Manual High Discount Override' : undefined,
-      status: isOverride ? 'flagged' : 'completed',
+      paymentMethod:
+        paymentMethod === 'Cash'
+          ? 'cash'
+          : paymentMethod === 'Transfer'
+          ? 'bank_transfer'
+          : paymentMethod === 'Card'
+          ? 'card'
+          : paymentMethod === 'Store Credit'
+          ? 'store_credit'
+          : 'split',
+      splitBreakdown: paymentMethod === 'Split' ? splitDetails : undefined,
+      hasManualOverride: false,
+      status: 'completed',
       createdAt: now,
       updatedAt: now,
       synced: 0,
     }
 
-    await db.transactions.add(newTxn)
+    try {
+      await db.transactions.add(newTxn)
 
-    // Deduct stock in inventory
-    for (const c of cart) {
-      await db.inventory.update(c.item.id, {
-        quantity: Math.max(0, c.item.quantity - c.quantity),
+      // Deduct inventory
+      for (const c of cart) {
+        if (c.item.id.startsWith('pos-')) continue
+        await db.inventory.update(c.item.id, {
+          quantity: Math.max(0, c.item.quantity - c.quantity),
+          updatedAt: now,
+          synced: 0,
+        })
+      }
+
+      // Add to Finance income ledger
+      await db.finance.add({
+        id: `fin-${now}`,
+        transactionDate: new Date().toISOString().split('T')[0],
+        type: 'income',
+        category: 'POS Sales',
+        description: `POS Receipt ${receiptNum} (${cart.length} items)`,
+        amount: total,
+        currency: 'NGN',
+        referenceId: newTxn.id,
+        createdAt: now,
         updatedAt: now,
         synced: 0,
       })
+
+      // Update Shift Stats
+      setShiftStats((prev) => ({
+        ...prev,
+        cashSales: prev.cashSales + (paymentMethod === 'Cash' ? total : 0),
+        transferSales: prev.transferSales + (paymentMethod === 'Transfer' ? total : 0),
+        cardSales: prev.cardSales + (paymentMethod === 'Card' ? total : 0),
+        creditSales: prev.creditSales + (paymentMethod === 'Store Credit' ? total : 0),
+        totalSales: prev.totalSales + total,
+        txnCount: prev.txnCount + 1,
+      }))
+
+      confetti({ particleCount: 60, spread: 60, origin: { y: 0.7 } })
+      setCompletedTxn(newTxn)
+      setShowReceiptModal(true)
+      setCart([])
+    } catch (err) {
+      console.error('Checkout error:', err)
+      showToast('Transaction recorded locally.')
+    }
+  }
+
+  // End Shift & Generate Z-Report Summary (No Alert Box)
+  const handleConfirmCloseShift = () => {
+    const summary = {
+      cashierName,
+      posStation,
+      shiftStartTime,
+      shiftEndTime: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+      cashSales: shiftStats.cashSales,
+      transferSales: shiftStats.transferSales,
+      cardSales: shiftStats.cardSales,
+      creditSales: shiftStats.creditSales,
+      totalSales: shiftStats.totalSales,
+      txnCount: shiftStats.txnCount,
+      expectedDrawerCash: shiftStats.cashSales,
+      actualCashCounted: Number(actualCashCounted || shiftStats.cashSales),
+      variance: Number(actualCashCounted || shiftStats.cashSales) - shiftStats.cashSales,
+      date: new Date().toLocaleDateString(),
     }
 
-    // Also add to Finance income
-    await db.finance.add({
-      id: `fin-${now}`,
-      transactionDate: new Date().toISOString().split('T')[0],
-      type: 'income',
-      category: 'POS Sales',
-      description: `POS Receipt ${receiptNum} (${newTxn.items.length} items)`,
-      amount: total,
-      currency: 'NGN',
-      referenceId: newTxn.id,
-      createdAt: now,
-      updatedAt: now,
-      synced: 0,
-    })
-
-    if (!isOverride) {
-      confetti({ particleCount: 50, spread: 50, origin: { y: 0.8 } })
-    }
-
+    setClosedShiftSummary(summary)
+    setIsShiftActive(false)
+    setShowCloseShiftModal(false)
+    setShowZReportModal(true)
     setCart([])
-    setDiscountPercent(0)
-    setOverrideReason('')
   }
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 h-full overflow-hidden bg-white">
-      {/* Left 7 Cols: Catalog & Cart Terminal */}
-      <div className="lg:col-span-7 border-r border-neutral-200 p-6 flex flex-col justify-between overflow-y-auto bg-[#fafafa]">
-        <div>
-          {/* Quick Product Grid */}
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 font-mono flex items-center gap-1.5">
-              <ShoppingBag className="h-4 w-4 text-neutral-800" /> Fast SKU Catalog
-            </h3>
-            <span className="text-xs text-neutral-500">{inventory.length} active items</span>
+    <div className="flex flex-col h-full bg-[#f4f5f7] font-sans select-none overflow-hidden relative">
+      {/* In-App Toast Notification */}
+      {toastMessage && (
+        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-neutral-900 text-white px-4 py-2.5 text-xs font-semibold shadow-2xl flex items-center gap-2 border border-neutral-700 animate-in fade-in slide-in-from-top-2">
+          <AlertCircle className="h-4 w-4 text-amber-400 shrink-0" />
+          <span>{toastMessage}</span>
+        </div>
+      )}
+
+      {/* 1. Header Bar matching screenshot */}
+      <header className="bg-white border-b border-neutral-200 px-6 py-3.5 flex items-center justify-between shadow-2xs shrink-0">
+        {/* Left Title */}
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-xl bg-orange-600 flex items-center justify-center text-white shadow-xs">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="h-5 w-5">
+              <path d="M3 3v18h18" strokeLinecap="round" strokeLinejoin="round" />
+              <path d="M19 9l-5 5-4-4-3 3" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          </div>
+          <h1 className="text-sm sm:text-base font-extrabold text-neutral-900 uppercase tracking-wide">
+            WHOLESALE & PRODUCTION <span className="text-orange-600">POS</span> TERMINAL
+          </h1>
+        </div>
+
+        {/* Right Shift & System Status Meta */}
+        <div className="flex items-center gap-4 sm:gap-6">
+          {/* System Status */}
+          <div className="text-right">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-neutral-400 font-mono block">
+              SYSTEM STATUS
+            </span>
+            <span className="text-xs font-bold text-neutral-800 flex items-center justify-end gap-1">
+              <Zap className="h-3.5 w-3.5 fill-amber-400 text-amber-500" />
+              <span>Online Mode</span>
+            </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 mb-6">
-            {inventory.slice(0, 6).map((item) => (
+          {/* Shift Status Indicator */}
+          {isShiftActive ? (
+            <div className="text-right hidden sm:block">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600 font-mono block">
+                SHIFT ACTIVE
+              </span>
+              <span className="text-xs font-semibold text-neutral-800">
+                Opened: {shiftStartTime}
+              </span>
+            </div>
+          ) : (
+            <div className="text-right hidden sm:block">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 font-mono block">
+                REGISTER LOCKED
+              </span>
+              <span className="text-xs font-semibold text-neutral-500">
+                Shift Inactive
+              </span>
+            </div>
+          )}
+
+          {/* Shift Action Button */}
+          {isShiftActive ? (
+            <button
+              onClick={() => setShowCloseShiftModal(true)}
+              className="flex items-center gap-1.5 rounded-xl border border-red-200 bg-white hover:bg-red-50 text-red-600 hover:text-red-700 px-3.5 py-1.5 text-xs font-bold transition-colors shadow-2xs cursor-pointer"
+            >
+              <Lock className="h-3.5 w-3.5 text-red-500" />
+              <span>Close Shift</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => setShowStartShiftModal(true)}
+              className="flex items-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 text-xs font-bold transition-colors shadow-xs cursor-pointer"
+            >
+              <Unlock className="h-3.5 w-3.5" />
+              <span>Start Shift</span>
+            </button>
+          )}
+        </div>
+      </header>
+
+      {/* 2. Main Terminal Content Area (Catalog + Order Panel) */}
+      <div className="flex-1 flex overflow-hidden relative">
+        {/* Left Side: Product Search, Category Pills & Grid */}
+        <div className="flex-1 flex flex-col p-4 sm:p-5 overflow-y-auto space-y-4 no-scrollbar">
+          {/* Search & Barcode Scan Bar */}
+          <form onSubmit={handleBarcodeSubmit} className="relative">
+            <div className="flex items-center rounded-2xl border-2 border-amber-400/90 bg-white shadow-xs px-3.5 py-2.5 transition-all focus-within:border-orange-500">
+              <Barcode className="h-5 w-5 text-neutral-400 mr-2.5 shrink-0" />
+              <input
+                ref={searchInputRef}
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Scan barcode or search..."
+                className="w-full bg-transparent text-sm font-medium text-neutral-800 placeholder-neutral-400 focus:outline-none"
+              />
+              <div className="flex items-center gap-2 text-neutral-400 shrink-0">
+                <button type="button" className="p-1 hover:text-neutral-700" title="Filter list">
+                  <Filter className="h-4 w-4" />
+                </button>
+                <div className="h-4 w-px bg-neutral-200" />
+                <button type="submit" className="p-1 hover:text-neutral-700" title="Enter barcode">
+                  <CornerDownLeft className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
+          </form>
+
+          {/* Category Filter Pills */}
+          <div className="flex items-center gap-2 overflow-x-auto no-scrollbar pb-1">
+            {categories.map((cat) => (
               <button
-                key={item.id}
-                onClick={() => handleAddToCart(item)}
-                className="group flex flex-col justify-between rounded-xl border border-neutral-200 bg-white p-3 text-left hover:border-neutral-400 transition-all shadow-2xs cursor-pointer"
+                key={cat}
+                onClick={() => setSelectedCategory(cat)}
+                className={`px-4 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                  selectedCategory === cat
+                    ? 'bg-[#ea580c] text-white shadow-xs'
+                    : 'bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-100 hover:text-black'
+                }`}
               >
-                <div>
-                  <span className="text-[10px] font-mono text-neutral-500 uppercase">{item.zone}</span>
-                  <h4 className="text-xs font-semibold text-neutral-900 line-clamp-2 mt-0.5">
-                    {item.name}
-                  </h4>
-                </div>
-                <div className="mt-3 flex items-center justify-between">
-                  <span className="font-mono text-xs font-bold text-neutral-900">
-                    ₦{item.unitPrice.toLocaleString()}
-                  </span>
-                  <span className="text-[10px] text-neutral-600 bg-neutral-100 px-1.5 py-0.5 rounded border border-neutral-200">
-                    Stock: {item.quantity}
-                  </span>
-                </div>
+                {cat}
               </button>
             ))}
           </div>
 
-          {/* Active Cart */}
-          <div className="rounded-xl border border-neutral-200 bg-white p-4 shadow-2xs">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 font-mono mb-3 flex items-center justify-between">
-              <span>Checkout Register Cart</span>
-              <span className="text-neutral-700">{cart.length} items</span>
-            </h3>
+          {/* Product Cards Grid */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3">
+            {filteredProducts.map((p) => {
+              const inCart = cart.find((c) => c.item.id === p.id)
+              const isOut = p.quantity <= 0
+              const isLow = p.quantity > 0 && p.quantity <= p.minThreshold
 
-            {cart.length === 0 ? (
-              <div className="py-8 text-center text-neutral-400 text-xs">
-                Cart is empty. Click SKU catalog items above to add.
-              </div>
-            ) : (
-              <div className="divide-y divide-neutral-100 max-h-48 overflow-y-auto mb-4">
-                {cart.map(({ item, quantity }) => (
-                  <div key={item.id} className="py-2 flex items-center justify-between text-xs">
-                    <div className="truncate max-w-[200px]">
-                      <p className="font-medium text-neutral-900 truncate">{item.name}</p>
-                      <span className="text-[10px] text-neutral-500 font-mono">
-                        ₦{item.unitPrice.toLocaleString()} × {quantity}
+              return (
+                <button
+                  key={p.id}
+                  onClick={() => handleAddToCart(p)}
+                  className={`group relative rounded-2xl border p-3 text-left transition-all flex flex-col justify-between h-44 cursor-pointer ${
+                    inCart
+                      ? 'border-orange-500 ring-2 ring-orange-500/20 bg-orange-50/10 shadow-sm'
+                      : isOut
+                      ? 'border-neutral-200 bg-white opacity-85 hover:border-neutral-300'
+                      : 'border-neutral-200 bg-white hover:border-orange-400 hover:shadow-md'
+                  }`}
+                >
+                  {/* Top Image / Status Badge */}
+                  <div className="relative w-full flex items-center justify-center h-20 mb-2">
+                    {/* Badge: Out of stock / Low */}
+                    {isOut ? (
+                      <span className="absolute top-0 text-[10px] font-bold text-red-500 bg-red-50/90 border border-red-200 px-2 py-0.5 rounded-full uppercase tracking-wider">
+                        OUT OF STOCK
                       </span>
-                    </div>
-                    <div className="flex items-center gap-3">
-                      <span className="font-mono font-semibold text-neutral-900">
-                        ₦{(item.unitPrice * quantity).toLocaleString()}
+                    ) : isLow ? (
+                      <span className="absolute top-0 right-0 text-[10px] font-bold text-white bg-red-500 px-1.5 py-0.2 rounded-full uppercase">
+                        Low
                       </span>
-                      <button
-                        onClick={() => handleRemoveFromCart(item.id)}
-                        className="text-neutral-400 hover:text-red-600 p-1"
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
-                      </button>
+                    ) : null}
+
+                    {/* Image or Color Wheel */}
+                    {p.image ? (
+                      <img src={p.image} alt={p.name} className="h-16 w-16 object-cover rounded-xl" />
+                    ) : (
+                      <div className="transition-transform group-hover:scale-105">
+                        <ColorWheelIcon className="h-16 w-16" />
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Product Details */}
+                  <div>
+                    <h4 className="text-xs font-bold text-neutral-900 line-clamp-2 leading-tight">
+                      {p.name}
+                    </h4>
+
+                    <div className="mt-2 flex items-baseline justify-between">
+                      <span className="text-xs font-bold font-mono text-[#ea580c]">
+                        ₦{p.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                      </span>
+                      <span className={`text-[11px] font-mono font-semibold ${isOut ? 'text-neutral-400' : 'text-emerald-600'}`}>
+                        {p.quantity}
+                      </span>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+                </button>
+              )
+            })}
+          </div>
 
-            {/* Calculations & Discounts */}
-            <div className="space-y-2 border-t border-neutral-200 pt-3 text-xs">
-              <div className="flex justify-between text-neutral-600">
-                <span>Subtotal</span>
-                <span className="font-mono">₦{subtotal.toLocaleString()}</span>
-              </div>
+          {filteredProducts.length === 0 && (
+            <div className="p-12 text-center text-neutral-400 bg-white rounded-2xl border border-dashed border-neutral-300">
+              <p className="text-sm font-semibold text-neutral-700">No products match your search</p>
+              <p className="text-xs text-neutral-400 mt-1">Try searching for paint colors like "Army Green", "Ash Grey", or "Beige".</p>
+            </div>
+          )}
+        </div>
 
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-600">Discount Override (%):</span>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min={0}
-                    max={100}
-                    value={discountPercent}
-                    onChange={(e) => setDiscountPercent(Number(e.target.value))}
-                    className="w-16 rounded bg-neutral-50 border border-neutral-300 px-2 py-1 text-right font-mono text-neutral-900 text-xs focus:outline-none"
-                  />
-                  {discountPercent > 15 && (
-                    <span className="text-[10px] font-bold text-red-600 flex items-center gap-0.5">
-                      <AlertTriangle className="h-3 w-3" /> Flagged
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {discountPercent > 15 && (
-                <input
-                  type="text"
-                  placeholder="Override authorization reason..."
-                  value={overrideReason}
-                  onChange={(e) => setOverrideReason(e.target.value)}
-                  className="w-full rounded bg-neutral-50 border border-neutral-300 px-2.5 py-1.5 text-xs text-neutral-900 placeholder-neutral-400 focus:outline-none"
-                />
-              )}
-
-              <div className="flex justify-between text-sm font-bold text-neutral-900 pt-2 border-t border-neutral-200">
-                <span>Total Due</span>
-                <span className="font-mono">₦{total.toLocaleString()}</span>
-              </div>
+        {/* Right Side: Order & Checkout Panel */}
+        <div className="w-96 lg:w-[420px] bg-white border-l border-neutral-200 flex flex-col justify-between shadow-lg shrink-0 overflow-y-auto no-scrollbar">
+          {/* Order Header */}
+          <div className="p-4 border-b border-neutral-200 flex items-center justify-between">
+            <div className="flex items-center gap-2 font-bold text-neutral-900 text-sm">
+              <ShoppingCart className="h-4 w-4 text-orange-600" />
+              <span>Order</span>
+              <span className="rounded-full bg-orange-100 text-orange-700 text-xs px-2 py-0.2 font-mono">
+                {totalCartCount}
+              </span>
             </div>
 
             <button
+              onClick={handleClearCart}
+              className="text-xs font-semibold text-red-500 hover:text-red-700 hover:underline cursor-pointer"
+            >
+              Clear
+            </button>
+          </div>
+
+          {/* Order Cart Items List */}
+          <div className="flex-1 p-4 overflow-y-auto space-y-3 divide-y divide-neutral-100 no-scrollbar min-h-[160px]">
+            {cart.length === 0 ? (
+              <div className="py-12 text-center text-neutral-400 text-xs">
+                <ShoppingCart className="h-8 w-8 mx-auto mb-2 opacity-30 text-neutral-400" />
+                <p className="font-semibold text-neutral-600">Your order is empty</p>
+                <p className="mt-0.5">Click items on the left catalog to add to cart.</p>
+              </div>
+            ) : (
+              cart.map(({ item, quantity }) => (
+                <div key={item.id} className="pt-3 first:pt-0 flex items-center justify-between gap-3 text-xs">
+                  <div className="flex-1 truncate">
+                    <h5 className="font-bold text-neutral-900 truncate leading-snug">{item.name}</h5>
+                    <span className="text-[11px] text-neutral-400 font-mono">
+                      ₦{item.unitPrice.toLocaleString(undefined, { minimumFractionDigits: 2 })} each
+                    </span>
+                  </div>
+
+                  {/* Quantity Stepper */}
+                  <div className="flex items-center rounded-lg border border-neutral-200 bg-neutral-50 px-1 py-0.5">
+                    <button
+                      onClick={() => handleUpdateQty(item.id, -1)}
+                      className="p-1 text-neutral-600 hover:text-black cursor-pointer"
+                      title="Decrease"
+                    >
+                      <Minus className="h-3 w-3" />
+                    </button>
+                    <span className="w-7 text-center font-bold font-mono text-neutral-900">{quantity}</span>
+                    <button
+                      onClick={() => handleUpdateQty(item.id, 1)}
+                      className="p-1 text-neutral-600 hover:text-black cursor-pointer"
+                      title="Increase"
+                    >
+                      <Plus className="h-3 w-3" />
+                    </button>
+                  </div>
+
+                  {/* Line Total */}
+                  <div className="font-mono font-bold text-neutral-900 text-right min-w-[75px]">
+                    ₦{(item.unitPrice * quantity).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </div>
+
+                  <button
+                    onClick={() => handleRemoveFromCart(item.id)}
+                    className="text-neutral-400 hover:text-red-600 p-0.5"
+                    title="Remove item"
+                  >
+                    <Trash2 className="h-3.5 w-3.5" />
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Payment Method & Checkout Totals Footer */}
+          <div className="p-4 bg-neutral-50/60 border-t border-neutral-200 space-y-4">
+            {/* PAYMENT METHOD */}
+            <div>
+              <span className="text-[11px] font-bold uppercase tracking-wider text-neutral-500 font-mono block mb-2">
+                PAYMENT METHOD
+              </span>
+
+              {/* 4 Method Buttons Grid */}
+              <div className="grid grid-cols-2 gap-2 mb-2">
+                {/* Cash */}
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('Cash')}
+                  className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                    paymentMethod === 'Cash'
+                      ? 'border-orange-500 bg-orange-50/40 text-orange-950 shadow-2xs'
+                      : 'border-neutral-200 bg-white hover:border-neutral-300 text-neutral-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Banknote className="h-4 w-4 text-orange-600" />
+                    <span>Cash</span>
+                  </div>
+                  {paymentMethod === 'Cash' && (
+                    <CheckCircle2 className="h-4 w-4 text-orange-600 fill-orange-600 text-white" />
+                  )}
+                </button>
+
+                {/* Transfer */}
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('Transfer')}
+                  className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                    paymentMethod === 'Transfer'
+                      ? 'border-orange-500 bg-orange-50/40 text-orange-950 shadow-2xs'
+                      : 'border-neutral-200 bg-white hover:border-neutral-300 text-neutral-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <ArrowLeftRight className="h-4 w-4 text-neutral-600" />
+                    <span>Transfer</span>
+                  </div>
+                  {paymentMethod === 'Transfer' && (
+                    <CheckCircle2 className="h-4 w-4 text-orange-600 fill-orange-600 text-white" />
+                  )}
+                </button>
+
+                {/* Card / POS */}
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('Card')}
+                  className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                    paymentMethod === 'Card'
+                      ? 'border-orange-500 bg-orange-50/40 text-orange-950 shadow-2xs'
+                      : 'border-neutral-200 bg-white hover:border-neutral-300 text-neutral-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <CreditCard className="h-4 w-4 text-neutral-600" />
+                    <span>Card / POS</span>
+                  </div>
+                  {paymentMethod === 'Card' && (
+                    <CheckCircle2 className="h-4 w-4 text-orange-600 fill-orange-600 text-white" />
+                  )}
+                </button>
+
+                {/* Store Credit */}
+                <button
+                  type="button"
+                  onClick={() => setPaymentMethod('Store Credit')}
+                  className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-semibold transition-all cursor-pointer ${
+                    paymentMethod === 'Store Credit'
+                      ? 'border-orange-500 bg-orange-50/40 text-orange-950 shadow-2xs'
+                      : 'border-neutral-200 bg-white hover:border-neutral-300 text-neutral-700'
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <Wallet className="h-4 w-4 text-neutral-600" />
+                    <span>Store Credit</span>
+                  </div>
+                  {paymentMethod === 'Store Credit' && (
+                    <CheckCircle2 className="h-4 w-4 text-orange-600 fill-orange-600 text-white" />
+                  )}
+                </button>
+              </div>
+
+              {/* Split Payment Wide Card */}
+              <div className="rounded-xl border border-emerald-200 bg-emerald-50/40 p-2.5 flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="h-6 w-6 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                    <Layers className="h-3.5 w-3.5" />
+                  </div>
+                  <div>
+                    <h6 className="text-xs font-bold text-neutral-900 leading-none">Split Payment</h6>
+                    <span className="text-[10px] text-neutral-500 mt-0.5 block">Pay with multiple payment methods</span>
+                  </div>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    setPaymentMethod('Split')
+                    setShowSplitModal(true)
+                  }}
+                  className="rounded-lg border border-emerald-300 bg-white hover:bg-emerald-50 text-emerald-800 px-2.5 py-1 text-[11px] font-bold transition-colors shadow-2xs cursor-pointer"
+                >
+                  Configure
+                </button>
+              </div>
+            </div>
+
+            {/* Subtotal & Total Due */}
+            <div className="space-y-1.5 pt-2 border-t border-neutral-200 text-xs">
+              <div className="flex items-center justify-between text-neutral-500 font-mono">
+                <span>SUBTOTAL</span>
+                <span>₦{subtotal.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+
+              <div className="flex items-center justify-between text-neutral-900 pt-1">
+                <span className="font-extrabold uppercase font-mono tracking-wider text-xs">TOTAL</span>
+                <span className="font-mono text-xl font-extrabold text-neutral-900">
+                  ₦{total.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                </span>
+              </div>
+            </div>
+
+            {/* Pay Button */}
+            <button
+              type="button"
               onClick={handleCheckout}
               disabled={cart.length === 0}
-              className="mt-4 w-full rounded-xl bg-black hover:bg-neutral-800 disabled:opacity-40 text-white font-semibold py-2.5 text-xs shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+              className="w-full rounded-xl bg-[#16a34a] hover:bg-[#15803d] disabled:opacity-40 disabled:cursor-not-allowed text-white font-extrabold py-3 text-sm shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
             >
-              <CreditCard className="h-4 w-4" />
-              <span>Complete Sale (₦{total.toLocaleString()})</span>
+              <Check className="h-5 w-5 stroke-[3]" />
+              <span>PAY ₦{total.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
             </button>
           </div>
         </div>
       </div>
 
-      {/* Right 5 Cols: Audit Log & Security Anomalies */}
-      <div className="lg:col-span-5 p-6 flex flex-col justify-between overflow-y-auto bg-white">
-        <div>
-          {/* Recent Transaction Ledger */}
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-xs font-semibold uppercase tracking-wider text-neutral-500 font-mono">
-              Live Transaction Ledger ({transactions.length})
-            </h3>
-          </div>
-
-          <div className="space-y-2">
-            {transactions.slice(0, 8).map((txn) => (
-              <div
-                key={txn.id}
-                className={`rounded-xl border p-3 text-xs transition-all ${
-                  txn.status === 'flagged'
-                    ? 'border-neutral-300 bg-neutral-50 text-neutral-900'
-                    : 'border-neutral-200 bg-white text-neutral-800 shadow-2xs'
-                }`}
-              >
-                <div className="flex items-center justify-between font-mono">
-                  <span className="font-semibold text-neutral-900">{txn.receiptNumber}</span>
-                  <span className="font-bold text-neutral-900">₦{txn.totalAmount.toLocaleString()}</span>
+      {/* 3. Start Cashier Shift Modal */}
+      {showStartShiftModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-neutral-200 text-neutral-900 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-neutral-200 pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="h-9 w-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center">
+                  <Unlock className="h-5 w-5" />
                 </div>
-                <div className="mt-1 flex items-center justify-between text-[11px] text-neutral-500">
-                  <span>{txn.cashierName} • {txn.paymentMethod}</span>
-                  <span>{new Date(txn.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+                <div>
+                  <h3 className="text-base font-bold text-neutral-900">Open Cashier Shift</h3>
+                  <p className="text-xs text-neutral-500">Activate register & select operator</p>
                 </div>
-                {txn.hasManualOverride && (
-                  <div className="mt-2 rounded bg-neutral-100 px-2 py-1 text-[10px] text-neutral-700 border border-neutral-200 flex items-center gap-1">
-                    <AlertTriangle className="h-3 w-3 text-neutral-700 shrink-0" />
-                    <span className="truncate">Override ({txn.discountPercent}%): {txn.overrideReason}</span>
-                  </div>
-                )}
               </div>
-            ))}
+              <button onClick={() => setShowStartShiftModal(false)} className="p-1 text-neutral-400 hover:text-black">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleStartShift} className="space-y-4 text-xs">
+              <div>
+                <label className="block font-bold text-neutral-700 uppercase tracking-wider mb-1">
+                  Cashier Name / Operator
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={cashierName}
+                  onChange={(e) => setCashierName(e.target.value)}
+                  placeholder="Enter Cashier Name"
+                  className="w-full rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-xs font-semibold text-neutral-900 focus:bg-white focus:outline-none focus:border-neutral-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 uppercase tracking-wider mb-1">
+                  POS Station Terminal
+                </label>
+                <input
+                  type="text"
+                  value={posStation}
+                  onChange={(e) => setPosStation(e.target.value)}
+                  className="w-full rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-xs text-neutral-700 focus:bg-white focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-200">
+                <button
+                  type="button"
+                  onClick={() => setShowStartShiftModal(false)}
+                  className="rounded-xl px-4 py-2 text-xs font-semibold text-neutral-600 hover:bg-neutral-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="rounded-xl bg-emerald-600 hover:bg-emerald-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs"
+                >
+                  START SHIFT & OPEN REGISTER
+                </button>
+              </div>
+            </form>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* 4. Close Shift Modal */}
+      {showCloseShiftModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-neutral-200 text-neutral-900 animate-in fade-in zoom-in-95">
+            <div className="flex items-center justify-between border-b border-neutral-200 pb-3 mb-4">
+              <div className="flex items-center gap-2">
+                <div className="h-8 w-8 rounded-xl bg-red-100 text-red-600 flex items-center justify-center">
+                  <Lock className="h-4 w-4" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-neutral-900">Close Cashier Shift</h3>
+                  <p className="text-xs text-neutral-500 font-mono">Shift Active since {shiftStartTime}</p>
+                </div>
+              </div>
+              <button onClick={() => setShowCloseShiftModal(false)} className="p-1 text-neutral-400 hover:text-black">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs mb-5">
+              <div className="p-3.5 rounded-xl bg-neutral-50 border border-neutral-200 space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-neutral-500">Cashier:</span>
+                  <span className="font-semibold text-neutral-900">{cashierName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-neutral-500">Total Cash Sales:</span>
+                  <span className="font-mono font-bold text-emerald-600">
+                    +₦{shiftStats.cashSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-neutral-500">Total Card / Transfer:</span>
+                  <span className="font-mono font-bold text-blue-600">
+                    ₦{(shiftStats.cardSales + shiftStats.transferSales).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+                <div className="border-t border-neutral-200 pt-2 flex justify-between font-bold text-sm">
+                  <span>Total Shift Revenue:</span>
+                  <span className="font-mono text-neutral-900">
+                    ₦{shiftStats.totalSales.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                  </span>
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 uppercase tracking-wider mb-1">
+                  Actual Counted Drawer Cash (₦)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={actualCashCounted}
+                  onChange={(e) => setActualCashCounted(Number(e.target.value))}
+                  className="w-full rounded-xl bg-white border border-neutral-300 px-3 py-2 text-sm font-mono font-bold text-neutral-900 focus:outline-none focus:border-neutral-900"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-200">
+              <button
+                type="button"
+                onClick={() => setShowCloseShiftModal(false)}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-neutral-600 hover:bg-neutral-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmCloseShift}
+                className="rounded-xl bg-red-600 hover:bg-red-700 px-5 py-2.5 text-xs font-bold text-white shadow-xs cursor-pointer"
+              >
+                End Shift & Print Z-Report
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 5. Official Z-Report Modal (Clean in-app UI, no alert boxes) */}
+      {showZReportModal && closedShiftSummary && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-neutral-200 text-neutral-900 my-8">
+            <button
+              type="button"
+              onClick={() => setShowZReportModal(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+              title="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="text-center border-b border-neutral-200 pb-3 mb-4">
+              <div className="h-10 w-10 mx-auto rounded-full bg-neutral-900 text-white flex items-center justify-center mb-2">
+                <FileCheck className="h-5 w-5" />
+              </div>
+              <h3 className="text-base font-bold text-neutral-900">End-Of-Shift Z-Report</h3>
+              <p className="text-xs text-neutral-500 font-mono mt-0.5">{closedShiftSummary.date} • {closedShiftSummary.posStation}</p>
+            </div>
+
+            <div className="space-y-2.5 text-xs font-mono">
+              <div className="flex justify-between text-neutral-600">
+                <span>Cashier Operator:</span>
+                <strong className="text-neutral-900 font-sans">{closedShiftSummary.cashierName}</strong>
+              </div>
+              <div className="flex justify-between text-neutral-600">
+                <span>Shift Duration:</span>
+                <span className="text-neutral-900">{closedShiftSummary.shiftStartTime} – {closedShiftSummary.shiftEndTime}</span>
+              </div>
+              <div className="flex justify-between text-neutral-600">
+                <span>Total Transactions:</span>
+                <strong className="text-neutral-900">{closedShiftSummary.txnCount} orders</strong>
+              </div>
+
+              <div className="border-t border-b border-neutral-200 py-2.5 my-2 space-y-1.5">
+                <div className="flex justify-between text-emerald-600">
+                  <span>Total Cash Collected:</span>
+                  <span>+₦{closedShiftSummary.cashSales.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between text-blue-600">
+                  <span>Total Card / Transfer:</span>
+                  <span>+₦{(closedShiftSummary.cardSales + closedShiftSummary.transferSales).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between font-bold text-neutral-900 pt-1 border-t border-neutral-100">
+                  <span>TOTAL SHIFT REVENUE:</span>
+                  <span>₦{closedShiftSummary.totalSales.toLocaleString()}</span>
+                </div>
+              </div>
+
+              <div className="p-3 rounded-xl bg-neutral-50 border border-neutral-200 space-y-1">
+                <div className="flex justify-between font-bold">
+                  <span>Expected Drawer Cash:</span>
+                  <span>₦{closedShiftSummary.expectedDrawerCash.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Actual Counted Cash:</span>
+                  <span>₦{closedShiftSummary.actualCashCounted.toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between font-bold pt-1 border-t border-neutral-200">
+                  <span>Variance:</span>
+                  <span className={closedShiftSummary.variance >= 0 ? 'text-emerald-600' : 'text-red-600'}>
+                    {closedShiftSummary.variance >= 0 ? '+₦' : '-₦'}
+                    {Math.abs(closedShiftSummary.variance).toLocaleString()}
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex-1 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-100 py-2.5 text-xs font-bold text-neutral-800 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="h-4 w-4" />
+                <span>Print Z-Report</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowZReportModal(false)
+                  setShowStartShiftModal(true)
+                }}
+                className="flex-1 rounded-xl bg-black hover:bg-neutral-800 py-2.5 text-xs font-bold text-white transition-colors cursor-pointer"
+              >
+                Open New Shift
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. Printable Customer Receipt Modal */}
+      {showReceiptModal && completedTxn && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4 overflow-y-auto">
+          <div className="relative w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl border border-neutral-200 text-neutral-900 my-8">
+            <button
+              type="button"
+              onClick={() => setShowReceiptModal(false)}
+              className="absolute top-4 right-4 p-1.5 rounded-lg text-neutral-400 hover:text-neutral-900 hover:bg-neutral-100 transition-colors cursor-pointer"
+              title="Close"
+            >
+              <X className="h-4 w-4" />
+            </button>
+
+            <div className="text-center border-b border-neutral-200 pb-4 mb-4">
+              <div className="h-10 w-10 mx-auto rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center mb-2">
+                <Check className="h-5 w-5 stroke-[3]" />
+              </div>
+              <h3 className="text-base font-bold text-neutral-900">Payment Successful!</h3>
+              <p className="text-xs text-neutral-500 font-mono mt-0.5">{completedTxn.receiptNumber}</p>
+            </div>
+
+            <div className="space-y-3 text-xs font-mono">
+              <div className="flex justify-between text-neutral-500">
+                <span>Date/Time:</span>
+                <span className="text-neutral-900">{new Date(completedTxn.createdAt).toLocaleTimeString()}</span>
+              </div>
+              <div className="flex justify-between text-neutral-500">
+                <span>Cashier:</span>
+                <span className="text-neutral-900">{completedTxn.cashierName}</span>
+              </div>
+              <div className="flex justify-between text-neutral-500">
+                <span>Payment Method:</span>
+                <span className="text-neutral-900 uppercase font-bold">{completedTxn.paymentMethod}</span>
+              </div>
+
+              <div className="border-t border-b border-neutral-200 py-2 my-2 space-y-1.5">
+                {completedTxn.items.map((it, idx) => (
+                  <div key={idx} className="flex justify-between text-xs font-sans">
+                    <span className="truncate max-w-[180px] font-medium">{it.name} × {it.quantity}</span>
+                    <span className="font-mono font-bold">₦{it.subtotal.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-between text-sm font-bold text-neutral-900 pt-1">
+                <span>TOTAL PAID</span>
+                <span>₦{completedTxn.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</span>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 mt-6">
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="flex-1 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-100 py-2.5 text-xs font-bold text-neutral-800 transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+              >
+                <Printer className="h-4 w-4" />
+                <span>Print Receipt</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowReceiptModal(false)}
+                className="flex-1 rounded-xl bg-black hover:bg-neutral-800 py-2.5 text-xs font-bold text-white transition-colors cursor-pointer"
+              >
+                New Sale
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7. Split Payment Modal */}
+      {showSplitModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs p-4">
+          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-neutral-200 text-neutral-900">
+            <div className="flex items-center justify-between border-b border-neutral-200 pb-3 mb-4">
+              <div>
+                <h3 className="text-base font-bold text-neutral-900">Configure Split Payment</h3>
+                <p className="text-xs text-neutral-500">Order Total: ₦{total.toLocaleString()}</p>
+              </div>
+              <button onClick={() => setShowSplitModal(false)} className="p-1 text-neutral-400 hover:text-black">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <div className="space-y-3 text-xs mb-5">
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">CASH AMOUNT (₦)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={splitDetails.cash}
+                  onChange={(e) => setSplitDetails({ ...splitDetails, cash: Number(e.target.value) })}
+                  className="w-full rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-xs font-mono font-bold focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">TRANSFER AMOUNT (₦)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={splitDetails.transfer}
+                  onChange={(e) => setSplitDetails({ ...splitDetails, transfer: Number(e.target.value) })}
+                  className="w-full rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-xs font-mono font-bold focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-bold text-neutral-700 mb-1">CARD / POS AMOUNT (₦)</label>
+                <input
+                  type="number"
+                  min="0"
+                  value={splitDetails.card}
+                  onChange={(e) => setSplitDetails({ ...splitDetails, card: Number(e.target.value) })}
+                  className="w-full rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-xs font-mono font-bold focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-neutral-200">
+              <button
+                onClick={() => setShowSplitModal(false)}
+                className="rounded-xl px-4 py-2 text-xs font-semibold text-neutral-600 hover:bg-neutral-100"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => setShowSplitModal(false)}
+                className="rounded-xl bg-black hover:bg-neutral-800 px-5 py-2 text-xs font-bold text-white shadow-xs"
+              >
+                Apply Split
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

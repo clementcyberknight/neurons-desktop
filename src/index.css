@@ -33,3 +33,41 @@ body {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* Remove default browser up/down spinners on number inputs */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none !important;
+  margin: 0 !important;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield !important;
+  appearance: textfield !important;
+}
+
+/* Print Styles for Word Documents & Receipts */
+@media print {
+  aside,
+  header,
+  nav,
+  button,
+  select,
+  .no-print {
+    display: none !important;
+  }
+  
+  body, main {
+    background: #ffffff !important;
+    padding: 0 !important;
+    margin: 0 !important;
+  }
+
+  [contenteditable] {
+    border: none !important;
+    box-shadow: none !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    min-height: auto !important;
+  }
+}

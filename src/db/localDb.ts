@@ -8,6 +8,10 @@ import type {
   FinanceRecord,
   TaskRecord,
   AlertRecord,
+  CustomerDebtRecord,
+  SupplierPayableRecord,
+  BankAccountRecord,
+  InvoiceRecord,
 } from '@/types/database'
 
 export class BAUDatabase extends Dexie {
@@ -19,6 +23,10 @@ export class BAUDatabase extends Dexie {
   finance!: EntityTable<FinanceRecord, 'id'>
   tasks!: EntityTable<TaskRecord, 'id'>
   alerts!: EntityTable<AlertRecord, 'id'>
+  customerDebts!: EntityTable<CustomerDebtRecord, 'id'>
+  supplierPayables!: EntityTable<SupplierPayableRecord, 'id'>
+  bankAccounts!: EntityTable<BankAccountRecord, 'id'>
+  invoices!: EntityTable<InvoiceRecord, 'id'>
 
   constructor() {
     super('BAUBusinessDB')
@@ -32,6 +40,10 @@ export class BAUDatabase extends Dexie {
       finance: 'id, transactionDate, type, category, synced',
       tasks: 'id, status, priority, assigneeRole, dueDate, synced',
       alerts: 'id, severity, module, isAcknowledged, createdAt, synced',
+      customerDebts: 'id, customerName, status, dueDate, updatedAt, synced',
+      supplierPayables: 'id, supplierName, status, dueDate, updatedAt, synced',
+      bankAccounts: 'id, bankName, accountType, updatedAt, synced',
+      invoices: 'id, invoiceNumber, customerName, status, dueDate, updatedAt, synced',
     })
   }
 }

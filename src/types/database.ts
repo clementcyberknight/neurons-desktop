@@ -37,7 +37,13 @@ export interface POSTransaction extends BaseEntity {
   discountPercent: number
   discountAmount: number
   totalAmount: number
-  paymentMethod: 'cash' | 'card' | 'bank_transfer' | 'mobile_money'
+  paymentMethod: 'cash' | 'card' | 'bank_transfer' | 'store_credit' | 'split'
+  splitBreakdown?: {
+    cash?: number
+    card?: number
+    transfer?: number
+    credit?: number
+  }
   hasManualOverride: boolean
   overrideReason?: string
   status: 'completed' | 'flagged' | 'refunded'
@@ -48,13 +54,19 @@ export interface InventoryItem extends BaseEntity {
   id: string
   sku: string
   name: string
-  category: 'pharmaceuticals' | 'electronics' | 'groceries' | 'fmcg' | 'supplies'
-  zone: 'Zone A' | 'Zone B' | 'Zone C' | 'Zone D'
+  image?: string
+  brand?: string
+  supplier?: string
+  category: string
+  zone: string
   quantity: number
-  minThreshold: number
-  unitPrice: number
-  costPrice: number
   unit: string
+  type?: 'Finished Good' | 'Raw Material'
+  salesChannel?: string
+  costPrice: number
+  unitPrice: number
+  minThreshold: number
+  expiryDate?: string
   lastRestocked: number
 }
 
@@ -83,16 +95,68 @@ export interface ShiftEntry extends BaseEntity {
   isCovered: boolean
 }
 
-// 5. 📈 Finance
+// 5. 📈 Finance & SME Accounting
 export interface FinanceRecord extends BaseEntity {
   id: string
   transactionDate: string
   type: 'income' | 'expense'
-  category: 'POS Sales' | 'Wholesale' | 'Rent & Utilities' | 'Salaries & Payroll' | 'Inventory Restock' | 'Software Licenses' | 'Maintenance'
+  category: string
   description: string
   amount: number
   currency: 'NGN' | 'USD' | 'KES' | 'GHS'
   referenceId?: string
+}
+
+export interface CustomerDebtRecord extends BaseEntity {
+  id: string
+  customerName: string
+  customerPhone?: string
+  description: string
+  totalAmount: number
+  amountPaid: number
+  balanceDue: number
+  dueDate: string
+  status: 'unpaid' | 'partial' | 'settled'
+}
+
+export interface SupplierPayableRecord extends BaseEntity {
+  id: string
+  supplierName: string
+  supplierPhone?: string
+  itemName: string
+  totalAmount: number
+  amountPaid: number
+  balanceDue: number
+  dueDate: string
+  status: 'unpaid' | 'partial' | 'settled'
+}
+
+export interface BankAccountRecord extends BaseEntity {
+  id: string
+  bankName: string
+  accountNumber: string
+  accountName: string
+  balance: number
+  accountType: 'bank' | 'pos_terminal' | 'cash_vault'
+}
+
+export interface InvoiceRecord extends BaseEntity {
+  id: string
+  invoiceNumber: string
+  customerName: string
+  customerPhone?: string
+  customerEmail?: string
+  issueDate: string
+  dueDate: string
+  items: { description: string; quantity: number; unitPrice: number; subtotal: number }[]
+  subtotal: number
+  discount: number
+  tax: number
+  totalAmount: number
+  amountPaid: number
+  balanceDue: number
+  status: 'draft' | 'pending' | 'paid' | 'overdue'
+  notes?: string
 }
 
 // 6. 📃 Tasks
