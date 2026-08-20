@@ -459,8 +459,8 @@ export const InventoryModule: React.FC<Props> = ({ searchQuery: externalSearchQu
       </div>
 
       {/* 3. Inventory Stock Table */}
-      <div className="flex-1 rounded-xl border border-neutral-200 bg-white p-4 flex flex-col justify-between shadow-2xs" ref={menuContainerRef}>
-        <div className="overflow-x-auto">
+      <div className="flex-1 min-h-[380px] rounded-xl border border-neutral-200 bg-white p-4 flex flex-col justify-between shadow-2xs" ref={menuContainerRef}>
+        <div className="overflow-x-auto min-h-[260px] pb-16">
           <table className="w-full text-left text-xs">
             <thead>
               <tr className="border-b border-neutral-200 text-neutral-500 font-mono">
@@ -476,10 +476,11 @@ export const InventoryModule: React.FC<Props> = ({ searchQuery: externalSearchQu
               </tr>
             </thead>
             <tbody className="divide-y divide-neutral-100">
-              {inventory.map((item) => {
+              {inventory.map((item, idx) => {
                 const isLow = item.quantity <= item.minThreshold
                 const isOut = item.quantity === 0
                 const isMenuOpen = activeMenuId === item.id
+                const openUpward = idx > 0 && (inventory.length <= 4 || idx >= inventory.length - 2)
 
                 return (
                   <tr key={item.id} className="hover:bg-neutral-50 transition-colors">
@@ -588,7 +589,7 @@ export const InventoryModule: React.FC<Props> = ({ searchQuery: externalSearchQu
 
                         {/* Dropdown Menu */}
                         {isMenuOpen && (
-                          <div className="absolute right-2 top-full mt-1.5 w-40 rounded-xl bg-white border border-neutral-200 shadow-xl py-1.5 z-50 text-left animate-in fade-in zoom-in-95 duration-100">
+                          <div className={`absolute right-2 ${openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} w-40 rounded-xl bg-white border border-neutral-200 shadow-xl py-1.5 z-50 text-left animate-in fade-in zoom-in-95 duration-100`}>
                             {/* 1. Edit */}
                             <button
                               onClick={() => handleOpenEdit(item)}

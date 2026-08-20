@@ -75,13 +75,13 @@ export interface StaffMember extends BaseEntity {
   id: string
   staffCode: string
   fullName: string
-  role: 'Licensed Pharmacist' | 'Staff Pharmacist' | 'Pharmacy Technician' | 'Store Manager' | 'Cashier' | 'Inventory Auditor'
-  department: 'Pharmacy' | 'Retail Floor' | 'Warehouse' | 'Management'
+  role: string
+  department: string
   hourlyRate: number
   monthlySalary: number
   phone: string
   email: string
-  status: 'active' | 'on_leave' | 'inactive'
+  status: 'active' | 'on_leave' | 'suspended' | 'inactive'
 }
 
 export interface ShiftEntry extends BaseEntity {
@@ -93,6 +93,7 @@ export interface ShiftEntry extends BaseEntity {
   day: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday'
   shiftTime: string
   isCovered: boolean
+  notes?: string
 }
 
 // 5. 📈 Finance & SME Accounting
@@ -104,6 +105,9 @@ export interface FinanceRecord extends BaseEntity {
   description: string
   amount: number
   currency: 'NGN' | 'USD' | 'KES' | 'GHS'
+  beneficiary?: string
+  paymentType?: 'Cash' | 'Bank Transfer' | 'Card' | 'Store Credit' | 'Split Payment'
+  paymentStatus?: 'Paid' | 'Pending' | 'Approved'
   referenceId?: string
 }
 
