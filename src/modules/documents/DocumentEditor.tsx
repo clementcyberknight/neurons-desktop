@@ -391,7 +391,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
           {/* Category Tag Selector */}
           <select
             value={category}
-            onChange={(e) => handleCategoryChange(e.target.value as any)}
+            onChange={(e) => handleCategoryChange(e.target.value as DocumentRecord['category'])}
             className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1 text-xs font-semibold text-neutral-700 focus:outline-none uppercase font-mono shadow-2xs cursor-pointer"
           >
             <option value="policy">Policy</option>

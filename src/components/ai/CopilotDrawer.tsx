@@ -6,21 +6,20 @@ import {
   Bot,
   User,
   Zap,
-  Cpu,
   RefreshCw,
   BarChart3,
   Calendar,
   ShieldAlert,
   Search,
-  CheckCircle2,
 } from 'lucide-react'
 import { SchemaRenderer } from './SchemaRenderer'
+import type { LLMOutputSchema } from '@/types/schemas'
 
 interface Message {
   id: string
   role: 'user' | 'assistant'
   content: string
-  parsedJson?: Record<string, any>
+  parsedJson?: LLMOutputSchema
   outputType?: string
   latencyMs?: number
   timestamp: number
@@ -93,9 +92,24 @@ export const CopilotDrawer: React.FC<Props> = ({ isOpen, onClose, onActionApplie
     setLoading(true)
 
     try {
-      let response: any
-      if (typeof window !== 'undefined' && (window as any).electronAPI) {
-        response = await (window as any).electronAPI.generateAI({ prompt: promptText })
+      let response: {
+        raw?: string
+        parsedJson?: LLMOutputSchema
+        outputType?: string
+        latencyMs?: number
+      } = {
+        raw: 'Offline local engine response',
+        outputType: 'CONVERSATIONAL_CHAT',
+        latencyMs: 520,
+      }
+
+      if (typeof window !== 'undefined' && window.electronAPI) {
+        const result = await window.electronAPI.generateAI({ prompt: promptText })
+        response = {
+          raw: result.data || result.error || 'No response generated',
+          outputType: 'CONVERSATIONAL_CHAT',
+          latencyMs: 300,
+        }
       } else {
         // Fallback simulation in pure browser dev mode
         await new Promise((r) => setTimeout(r, 800))

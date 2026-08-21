@@ -205,7 +205,13 @@ export const FinanceModule: React.FC<Props> = () => {
   const totalLiquidMoney = bankAccounts.reduce((acc, curr) => acc + curr.balance, 0)
 
   // Forms state
-  const [newEntry, setNewEntry] = useState<Partial<FinanceRecord>>({
+  const [newEntry, setNewEntry] = useState<{
+    type: 'income' | 'expense'
+    category: string
+    description: string
+    amount: number
+    currency: 'NGN' | 'USD' | 'KES' | 'GHS'
+  }>({
     type: 'income',
     category: 'Wholesale Sales',
     description: '',
@@ -255,7 +261,7 @@ export const FinanceModule: React.FC<Props> = () => {
     await db.finance.add({
       id: `fin-${now}`,
       transactionDate: new Date().toISOString().split('T')[0],
-      type: newEntry.type as any,
+      type: newEntry.type,
       category: newEntry.category || 'General Sales',
       description: newEntry.description,
       amount: Number(newEntry.amount),

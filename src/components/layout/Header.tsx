@@ -78,8 +78,8 @@ export const Header: React.FC<Props> = ({
       finance: await db.finance.toArray(),
       alerts: await db.alerts.toArray(),
     }
-    if (typeof window !== 'undefined' && (window as any).electronAPI) {
-      await (window as any).electronAPI.exportData(JSON.stringify(backupData, null, 2))
+    if (typeof window !== 'undefined' && window.electronAPI) {
+      await window.electronAPI.exportData(JSON.stringify(backupData, null, 2))
     } else {
       const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' })
       const url = URL.createObjectURL(blob)
@@ -93,10 +93,10 @@ export const Header: React.FC<Props> = ({
   return (
     <header
       className="h-12 border-b border-neutral-200 bg-white px-4 flex items-center justify-between shrink-0 select-none pr-[144px]"
-      style={{ WebkitAppRegion: 'drag' } as any}
+      style={{ WebkitAppRegion: 'drag' }}
     >
       {/* Title & Sidebar Toggle */}
-      <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' } as any}>
+      <div className="flex items-center gap-3" style={{ WebkitAppRegion: 'no-drag' }}>
         {isSidebarCollapsed && onToggleSidebar && (
           <button
             onClick={onToggleSidebar}
@@ -113,7 +113,7 @@ export const Header: React.FC<Props> = ({
       </div>
 
       {/* Global Actions - Aligned with window controls */}
-      <div className="flex items-center h-full gap-2" style={{ WebkitAppRegion: 'no-drag' } as any}>
+      <div className="flex items-center h-full gap-2" style={{ WebkitAppRegion: 'no-drag' }}>
         {/* Upgrade Action */}
         <button
           onClick={() => openWebsite('https://neurons.com')}

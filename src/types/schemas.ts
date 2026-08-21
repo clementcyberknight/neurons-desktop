@@ -76,7 +76,7 @@ export interface ToolCallSchema {
   output_type: 'TOOL_CALL'
   module: string
   endpoint: string
-  parameters: Record<string, any>
+  parameters: Record<string, string | number | boolean | null | undefined>
 }
 
 export interface ActionConfirmationSchema {

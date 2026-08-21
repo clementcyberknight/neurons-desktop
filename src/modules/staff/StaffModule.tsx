@@ -60,7 +60,7 @@ const SEED_STAFF: Omit<StaffMember, 'createdAt' | 'updatedAt' | 'synced'>[] = [
 export const StaffModule: React.FC<Props> = ({ searchQuery: externalSearchQuery = '' }) => {
   const [activeTab, setActiveTab] = useState<'rota' | 'directory'>('directory')
   const [searchTerm, setSearchTerm] = useState(externalSearchQuery)
-  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'on_leave' | 'suspended'>('all')
+  const [statusFilter, setStatusFilter] = useState<'all' | StaffMember['status']>('all')
   const [deptFilter, setDeptFilter] = useState<string>('all')
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null)
 
@@ -456,7 +456,7 @@ export const StaffModule: React.FC<Props> = ({ searchQuery: externalSearchQuery 
                 <Filter className="h-3.5 w-3.5 text-neutral-400" />
                 <select
                   value={statusFilter}
-                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  onChange={(e) => setStatusFilter(e.target.value as 'all' | StaffMember['status'])}
                   className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 focus:outline-none"
                 >
                   <option value="all">All Statuses</option>
@@ -841,7 +841,7 @@ export const StaffModule: React.FC<Props> = ({ searchQuery: externalSearchQuery 
                   <label className="block font-bold text-neutral-700 uppercase mb-1">Status</label>
                   <select
                     value={staffForm.status}
-                    onChange={(e) => setStaffForm({ ...staffForm, status: e.target.value as any })}
+                    onChange={(e) => setStaffForm({ ...staffForm, status: e.target.value as StaffMember['status'] })}
                     className="w-full rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-xs font-semibold focus:bg-white focus:outline-none"
                   >
                     <option value="active">Active</option>

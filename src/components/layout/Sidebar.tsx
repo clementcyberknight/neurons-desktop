@@ -1,9 +1,14 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import {
   SquarePen,
   PanelLeftClose,
   PanelLeftOpen,
+  History,
+  Clock,
 } from 'lucide-react'
+import { useLiveQuery } from 'dexie-react-hooks'
+import { db } from '@/db/localDb'
+import { initializeSeedDataIfEmpty } from '@/db/seedData'
 
 // Internal Icons Pack (Offline-First)
 import iconDocument from '@/assets/icons-pack/File-Folder--Streamline-Plump.png'
@@ -35,6 +40,10 @@ interface Props {
   isCollapsed?: boolean
   onToggleCollapse?: () => void
   onNewAction?: () => void
+  activeChatId?: string | null
+  chatViewMode?: 'history_list' | 'chat'
+  onSelectChatSession?: (id: string | null) => void
+  onOpenHistory?: () => void
 }
 
 const NAV_ITEMS: { id: ActiveModule; label: string; icon: string }[] = [
@@ -55,7 +64,20 @@ export const Sidebar: React.FC<Props> = ({
   isCollapsed = false,
   onToggleCollapse,
   onNewAction,
+  activeChatId,
+  chatViewMode = 'chat',
+  onSelectChatSession,
+  onOpenHistory,
 }) => {
+  // Query chats and task history from Dexie database
+  const chatSessions =
+    useLiveQuery(() => db.chatSessions.orderBy('lastMessageAt').reverse().limit(30).toArray()) || []
+
+  useEffect(() => {
+    // Ensure chat sessions exist on load
+    initializeSeedDataIfEmpty().catch(console.error)
+  }, [])
+
   const handleNewActionClick = () => {
     if (onNewAction) {
       onNewAction()
@@ -76,13 +98,22 @@ export const Sidebar: React.FC<Props> = ({
             <PanelLeftOpen className="h-5 w-5" />
           </button>
 
-          <button
-            onClick={handleNewActionClick}
-            className="p-2 rounded-lg bg-neutral-200 hover:bg-neutral-300 text-neutral-900 transition-colors shadow-xs cursor-pointer"
-            title="New Document"
-          >
-            <SquarePen className="h-4 w-4" />
-          </button>
+          {(() => {
+            const isNewChatActive = activeModule === 'chat' && (activeChatId === null || activeChatId === undefined)
+            return (
+              <button
+                onClick={handleNewActionClick}
+                className={`p-2 rounded-lg transition-colors cursor-pointer ${
+                  isNewChatActive
+                    ? 'bg-neutral-200 ring-1 ring-neutral-300 text-neutral-900 shadow-xs'
+                    : 'text-neutral-600 hover:bg-neutral-200/70 hover:text-neutral-900'
+                }`}
+                title="New chat"
+              >
+                <SquarePen className="h-4 w-4" />
+              </button>
+            )
+          })()}
 
           <div className="w-8 h-px bg-neutral-200 my-1" />
 
@@ -135,15 +166,24 @@ export const Sidebar: React.FC<Props> = ({
           </div>
         </div>
 
-        {/* "New chat" / "New document" button */}
+        {/* "New chat" button */}
         <div className="px-3 py-1.5">
-          <button
-            onClick={handleNewActionClick}
-            className="w-full flex items-center gap-2.5 px-3 py-2 rounded-lg bg-neutral-200/80 hover:bg-neutral-200 text-neutral-900 text-sm font-medium transition-all text-left shadow-2xs cursor-pointer"
-          >
-            <SquarePen className="h-4 w-4 text-neutral-700" />
-            <span>New chat</span>
-          </button>
+          {(() => {
+            const isNewChatActive = activeModule === 'chat' && chatViewMode === 'chat' && activeChatId === null
+            return (
+              <button
+                onClick={handleNewActionClick}
+                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-all text-left cursor-pointer ${
+                  isNewChatActive
+                    ? 'bg-neutral-200/90 text-black font-semibold shadow-2xs'
+                    : 'text-neutral-700 hover:bg-neutral-200/60 hover:text-neutral-900 font-medium'
+                }`}
+              >
+                <SquarePen className="h-4 w-4 text-neutral-700 shrink-0" />
+                <span>New chat</span>
+              </button>
+            )
+          })()}
         </div>
 
         {/* Complete Visible Navigation List */}
@@ -165,6 +205,59 @@ export const Sidebar: React.FC<Props> = ({
               </button>
             )
           })}
+        </div>
+
+        {/* Chats and tasks Section (Below Cashbook) */}
+        <div className="pt-3.5 pb-2 px-3">
+          <div className="flex items-center justify-between px-2 mb-1.5 text-neutral-500">
+            <button
+              onClick={() => {
+                if (onOpenHistory) onOpenHistory()
+                else onSelectChatSession?.(null)
+              }}
+              className={`text-xs font-semibold tracking-tight transition-colors cursor-pointer text-left ${
+                activeModule === 'chat' && chatViewMode === 'history_list'
+                  ? 'text-neutral-900 font-bold'
+                  : 'text-neutral-500 hover:text-neutral-900'
+              }`}
+            >
+              Chats and tasks
+            </button>
+            <button
+              onClick={() => {
+                if (onOpenHistory) onOpenHistory()
+                else onSelectChatSession?.(null)
+              }}
+              className="p-1 rounded-md hover:bg-neutral-200/70 text-neutral-400 hover:text-neutral-700 transition-colors cursor-pointer"
+              title="View all chats & tasks"
+            >
+              <History className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          <div className="space-y-0.5 max-h-[240px] overflow-y-auto no-scrollbar">
+            {chatSessions.map((session) => {
+              const isSelected = activeModule === 'chat' && chatViewMode === 'chat' && activeChatId === session.id
+              return (
+                <button
+                  key={session.id}
+                  onClick={() => {
+                    onSelectChatSession?.(session.id)
+                    onSelectModule('chat')
+                  }}
+                  className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs transition-colors text-left group cursor-pointer ${
+                    isSelected
+                      ? 'bg-neutral-200/90 text-neutral-900 font-medium shadow-2xs'
+                      : 'text-neutral-600 hover:bg-neutral-200/60 hover:text-neutral-900'
+                  }`}
+                  title={session.title}
+                >
+                  <span className="text-[10px] text-neutral-400 group-hover:text-neutral-600 shrink-0 select-none font-mono">○</span>
+                  <span className="truncate">{session.title}</span>
+                </button>
+              )
+            })}
+          </div>
         </div>
       </div>
 

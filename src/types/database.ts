@@ -188,3 +188,26 @@ export interface AlertRecord extends BaseEntity {
   isAcknowledged: boolean
   transactionId?: string
 }
+
+// 💬 AI Chat & Tasks Conversation History
+import type { LLMOutputSchema } from './schemas'
+
+export interface ChatMessage {
+  id: string
+  role: 'user' | 'assistant'
+  content: string
+  parsedJson?: LLMOutputSchema
+  outputType?: string
+  latencyMs?: number
+  timestamp: number
+  thinkMode?: boolean
+}
+
+export interface ChatSession extends BaseEntity {
+  id: string
+  title: string
+  messages: ChatMessage[]
+  lastMessageAt: number
+  isPinned?: boolean
+}
+

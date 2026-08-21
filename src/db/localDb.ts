@@ -12,6 +12,7 @@ import type {
   SupplierPayableRecord,
   BankAccountRecord,
   InvoiceRecord,
+  ChatSession,
 } from '@/types/database'
 
 export class BAUDatabase extends Dexie {
@@ -27,23 +28,25 @@ export class BAUDatabase extends Dexie {
   supplierPayables!: EntityTable<SupplierPayableRecord, 'id'>
   bankAccounts!: EntityTable<BankAccountRecord, 'id'>
   invoices!: EntityTable<InvoiceRecord, 'id'>
+  chatSessions!: EntityTable<ChatSession, 'id'>
 
   constructor() {
     super('BAUBusinessDB')
-    
-    this.version(1).stores({
-      documents: 'id, category, updatedAt, synced, isPinned',
-      transactions: 'id, receiptNumber, cashierId, posStation, status, createdAt, synced',
-      inventory: 'id, sku, name, category, zone, quantity, minThreshold, synced',
-      staff: 'id, staffCode, department, role, status, synced',
-      shifts: 'id, weekStarting, staffId, day, synced',
-      finance: 'id, transactionDate, type, category, synced',
-      tasks: 'id, status, priority, assigneeRole, dueDate, synced',
-      alerts: 'id, severity, module, isAcknowledged, createdAt, synced',
-      customerDebts: 'id, customerName, status, dueDate, updatedAt, synced',
-      supplierPayables: 'id, supplierName, status, dueDate, updatedAt, synced',
+
+    this.version(3).stores({
+      documents: 'id, category, updatedAt, createdAt, synced, isPinned, [category+updatedAt]',
+      transactions: 'id, receiptNumber, cashierId, posStation, status, paymentMethod, createdAt, updatedAt, synced, [status+createdAt], [paymentMethod+createdAt]',
+      inventory: 'id, sku, name, category, zone, quantity, minThreshold, type, updatedAt, createdAt, synced, [type+updatedAt], [category+updatedAt]',
+      staff: 'id, staffCode, department, role, status, updatedAt, createdAt, synced, [status+updatedAt], [department+updatedAt]',
+      shifts: 'id, weekStarting, staffId, day, createdAt, synced, [weekStarting+day]',
+      finance: 'id, transactionDate, type, category, paymentStatus, paymentType, createdAt, updatedAt, synced, [type+transactionDate], [type+paymentStatus]',
+      tasks: 'id, status, priority, assigneeRole, dueDate, createdAt, synced, [status+dueDate]',
+      alerts: 'id, severity, module, isAcknowledged, createdAt, synced, [module+createdAt]',
+      customerDebts: 'id, customerName, status, dueDate, updatedAt, synced, [status+dueDate]',
+      supplierPayables: 'id, supplierName, status, dueDate, updatedAt, synced, [status+dueDate]',
       bankAccounts: 'id, bankName, accountType, updatedAt, synced',
-      invoices: 'id, invoiceNumber, customerName, status, dueDate, updatedAt, synced',
+      invoices: 'id, invoiceNumber, customerName, status, dueDate, updatedAt, synced, [status+dueDate]',
+      chatSessions: 'id, title, lastMessageAt, createdAt, updatedAt, synced',
     })
   }
 }

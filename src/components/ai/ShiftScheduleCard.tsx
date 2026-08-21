@@ -1,6 +1,7 @@
 import React from 'react'
 import { Calendar, UserCheck, Check, Plus } from 'lucide-react'
 import type { ShiftScheduleSchema } from '@/types/schemas'
+import type { ShiftEntry } from '@/types/database'
 import { db } from '@/db/localDb'
 
 interface Props {
@@ -8,24 +9,34 @@ interface Props {
   onApply?: () => void
 }
 
+const VALID_DAYS: ShiftEntry['day'][] = [
+  'Monday',
+  'Tuesday',
+  'Wednesday',
+  'Thursday',
+  'Friday',
+  'Saturday',
+  'Sunday',
+]
+
 export const ShiftScheduleCard: React.FC<Props> = ({ data, onApply }) => {
   const [applied, setApplied] = React.useState(false)
 
   const handleApplyToRota = async () => {
     try {
       const now = Date.now()
-      const entries = data.schedule.map((s, idx) => ({
+      const entries: ShiftEntry[] = data.schedule.map((s, idx) => ({
         id: `shf-gen-${now}-${idx}`,
         weekStarting: data.week_starting || '2026-09-01',
         staffId: s.staff_id || `stf-${idx}`,
         staffName: s.name,
         role: s.role,
-        day: s.day as any,
+        day: VALID_DAYS.includes(s.day as ShiftEntry['day']) ? (s.day as ShiftEntry['day']) : 'Monday',
         shiftTime: s.shift,
         isCovered: true,
         createdAt: now,
         updatedAt: now,
-        synced: 0 as const,
+        synced: 0,
       }))
       await db.shifts.bulkAdd(entries)
       setApplied(true)

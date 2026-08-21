@@ -278,7 +278,7 @@ export const TasksModule: React.FC<Props> = ({ searchQuery = '', onAskAI }) => {
                   <label className="text-neutral-600">Priority</label>
                   <select
                     value={newTaskPriority}
-                    onChange={(e) => setNewTaskPriority(e.target.value as any)}
+                    onChange={(e) => setNewTaskPriority(e.target.value as TaskRecord['priority'])}
                     className="w-full rounded-lg bg-neutral-50 border border-neutral-300 p-2 text-neutral-900 mt-1 focus:outline-none"
                   >
                     <option value="LOW">Low</option>

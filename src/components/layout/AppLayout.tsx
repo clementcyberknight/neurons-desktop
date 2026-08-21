@@ -15,9 +15,10 @@ import { initializeSeedDataIfEmpty } from '@/db/seedData'
 
 export const AppLayout: React.FC = () => {
   const [activeModule, setActiveModule] = useState<ActiveModule>('chat')
+  const [activeChatId, setActiveChatId] = useState<string | null>(null)
+  const [chatViewMode, setChatViewMode] = useState<'history_list' | 'chat'>('chat')
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false)
   const [searchQuery, setSearchQuery] = useState('')
-  const [chatKey, setChatKey] = useState(0)
 
   useEffect(() => {
     // Initialize seed data on first mount
@@ -25,7 +26,23 @@ export const AppLayout: React.FC = () => {
   }, [])
 
   const handleNewAction = () => {
-    setChatKey((prev) => prev + 1)
+    setActiveChatId(null)
+    setChatViewMode('chat')
+    setActiveModule('chat')
+  }
+
+  const handleOpenHistory = () => {
+    setChatViewMode('history_list')
+    setActiveModule('chat')
+  }
+
+  const handleSelectChatSession = (id: string | null) => {
+    if (id === null) {
+      setChatViewMode('history_list')
+    } else {
+      setActiveChatId(id)
+      setChatViewMode('chat')
+    }
     setActiveModule('chat')
   }
 
@@ -38,6 +55,10 @@ export const AppLayout: React.FC = () => {
         isCollapsed={isSidebarCollapsed}
         onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
         onNewAction={handleNewAction}
+        activeChatId={activeChatId}
+        chatViewMode={chatViewMode}
+        onSelectChatSession={handleSelectChatSession}
+        onOpenHistory={handleOpenHistory}
       />
 
       {/* Main Content Area */}
@@ -54,7 +75,15 @@ export const AppLayout: React.FC = () => {
         {/* Dynamic Module Content */}
         <main className="flex-1 overflow-hidden bg-white">
           {activeModule === 'chat' && (
-            <ChatModule key={chatKey} />
+            <ChatModule
+              activeChatId={activeChatId}
+              viewMode={chatViewMode}
+              onViewModeChange={setChatViewMode}
+              onChatCreated={(newId) => {
+                setActiveChatId(newId)
+                if (newId) setChatViewMode('chat')
+              }}
+            />
           )}
           {activeModule === 'documents' && (
             <DocumentsModule

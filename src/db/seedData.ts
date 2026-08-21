@@ -8,12 +8,11 @@ import type {
   FinanceRecord,
   TaskRecord,
   AlertRecord,
+  ChatSession,
 } from '@/types/database'
 
 export async function initializeSeedDataIfEmpty() {
   const count = await db.inventory.count()
-  if (count > 0) return
-
   const now = Date.now()
 
   // 1. Initial Inventory (4 Zones)
@@ -182,12 +181,265 @@ export async function initializeSeedDataIfEmpty() {
     { id: 'fin-3', transactionDate: '2026-08-15', type: 'expense', category: 'Salaries & Payroll', description: 'Bi-weekly staff advance disbursement', amount: 350000, currency: 'NGN', createdAt: now - 86400000 * 5, updatedAt: now - 86400000 * 5, synced: 1 },
   ]
 
-  await db.inventory.bulkAdd(initialInventory)
-  await db.staff.bulkAdd(initialStaff)
-  await db.shifts.bulkAdd(initialShifts)
-  await db.documents.bulkAdd(initialDocuments)
-  await db.transactions.bulkAdd(initialTransactions)
-  await db.tasks.bulkAdd(initialTasks)
-  await db.alerts.bulkAdd(initialAlerts)
-  await db.finance.bulkAdd(initialFinance)
+  // 9. Initial Chat & Task Conversations (Keep track of conversations with AI)
+  const initialChatSessions: ChatSession[] = [
+    {
+      id: 'chat-1',
+      title: 'Improving agents.md for Electron app optimization',
+      messages: [
+        {
+          id: 'msg-1-1',
+          role: 'user',
+          content: 'How do we optimize AGENTS.md for Electron desktop performance and offline-first safety?',
+          timestamp: now - 1000 * 60 * 46,
+        },
+        {
+          id: 'msg-1-2',
+          role: 'assistant',
+          content: 'To maximize performance and reliability in Neurons Desktop on Electron:\n\n1. **Zero Type Cheating**: Enforce strict TypeScript without `any` escapes.\n2. **Memory Safety**: Disallow unbounded `.toArray()` queries on 100k records.\n3. **Worker Isolation**: Run AI inference and heavy tasks off the UI thread.\n4. **Context Isolation**: Always maintain `contextIsolation: true` and `nodeIntegration: false`.',
+          timestamp: now - 1000 * 60 * 46 + 5000,
+        },
+      ],
+      lastMessageAt: now - 1000 * 60 * 46,
+      createdAt: now - 1000 * 60 * 46,
+      updatedAt: now - 1000 * 60 * 46,
+      synced: 1,
+    },
+    {
+      id: 'chat-2',
+      title: 'Adding config file to OpenCode',
+      messages: [
+        {
+          id: 'msg-2-1',
+          role: 'user',
+          content: 'Can you generate the configuration JSON for OpenCode runtime settings?',
+          timestamp: now - 86400000 * 3,
+        },
+        {
+          id: 'msg-2-2',
+          role: 'assistant',
+          content: 'Here is the generated runtime configuration schema with offline caching enabled.',
+          timestamp: now - 86400000 * 3 + 3000,
+        },
+      ],
+      lastMessageAt: now - 86400000 * 3,
+      createdAt: now - 86400000 * 3,
+      updatedAt: now - 86400000 * 3,
+      synced: 1,
+    },
+    {
+      id: 'chat-3',
+      title: 'my best chat for marketing',
+      messages: [
+        {
+          id: 'msg-3-1',
+          role: 'user',
+          content: 'Draft a marketing strategy for retail pharmacy customer retention and loyalty programs.',
+          timestamp: now - 86400000 * 5,
+        },
+        {
+          id: 'msg-3-2',
+          role: 'assistant',
+          content: 'Here is a 4-pillar retention roadmap including automated SMS refill alerts, loyalty tier point multipliers, and wellness bundles.',
+          timestamp: now - 86400000 * 5 + 4000,
+        },
+      ],
+      lastMessageAt: now - 86400000 * 5,
+      createdAt: now - 86400000 * 5,
+      updatedAt: now - 86400000 * 5,
+      synced: 1,
+    },
+    {
+      id: 'chat-4',
+      title: 'Review request',
+      messages: [
+        {
+          id: 'msg-4-1',
+          role: 'user',
+          content: 'Please review the cashbook ledger reconciliations for this week.',
+          timestamp: now - 86400000 * 5 - 3600000 * 2,
+        },
+        {
+          id: 'msg-4-2',
+          role: 'assistant',
+          content: 'All cashbook debit and credit records match the till balances with zero discrepancies.',
+          timestamp: now - 86400000 * 5 - 3600000 * 2 + 4000,
+        },
+      ],
+      lastMessageAt: now - 86400000 * 5 - 3600000 * 2,
+      createdAt: now - 86400000 * 5 - 3600000 * 2,
+      updatedAt: now - 86400000 * 5 - 3600000 * 2,
+      synced: 1,
+    },
+    {
+      id: 'chat-5',
+      title: 'Integrating AI into business management application',
+      messages: [
+        {
+          id: 'msg-5-1',
+          role: 'user',
+          content: 'How should small retail businesses integrate on-device AI for stock management?',
+          timestamp: now - 86400000 * 6,
+        },
+        {
+          id: 'msg-5-2',
+          role: 'assistant',
+          content: 'On-device AI provides instant anomaly detection, automated shift generation, and proactive reorder warnings without incurring cloud server latency or fees.',
+          timestamp: now - 86400000 * 6 + 2000,
+        },
+      ],
+      lastMessageAt: now - 86400000 * 6,
+      createdAt: now - 86400000 * 6,
+      updatedAt: now - 86400000 * 6,
+      synced: 1,
+    },
+    {
+      id: 'chat-6',
+      title: 'Using husky to enforce code quality standards',
+      messages: [
+        {
+          id: 'msg-6-1',
+          role: 'user',
+          content: 'Set up pre-commit git hooks with husky to verify typescript compilation before commit.',
+          timestamp: now - 86400000 * 7,
+        },
+        {
+          id: 'msg-6-2',
+          role: 'assistant',
+          content: 'Configured `.husky/pre-commit` to execute `npx tsc --noEmit` on staged files.',
+          timestamp: now - 86400000 * 7 + 3000,
+        },
+      ],
+      lastMessageAt: now - 86400000 * 7,
+      createdAt: now - 86400000 * 7,
+      updatedAt: now - 86400000 * 7,
+      synced: 1,
+    },
+    {
+      id: 'chat-7',
+      title: 'Refactoring logger implementation for TypeScript 7',
+      messages: [
+        {
+          id: 'msg-7-1',
+          role: 'user',
+          content: 'Refactor electron console loggers to write to rotating file stream.',
+          timestamp: now - 86400000 * 7 - 3600000 * 5,
+        },
+        {
+          id: 'msg-7-2',
+          role: 'assistant',
+          content: 'Structured JSON log streaming implemented with automatic daily log file rotation.',
+          timestamp: now - 86400000 * 7 - 3600000 * 5 + 2500,
+        },
+      ],
+      lastMessageAt: now - 86400000 * 7 - 3600000 * 5,
+      createdAt: now - 86400000 * 7 - 3600000 * 5,
+      updatedAt: now - 86400000 * 7 - 3600000 * 5,
+      synced: 1,
+    },
+    {
+      id: 'chat-8',
+      title: 'Crypto trading platform agent architecture guide',
+      messages: [
+        {
+          id: 'msg-8-1',
+          role: 'user',
+          content: 'Design architectural plan for high-frequency algorithmic risk evaluator.',
+          timestamp: now - 86400000 * 10,
+        },
+        {
+          id: 'msg-8-2',
+          role: 'assistant',
+          content: 'Defined streaming order book analyzer using ring buffers and sub-millisecond execution pipelines.',
+          timestamp: now - 86400000 * 10 + 4000,
+        },
+      ],
+      lastMessageAt: now - 86400000 * 10,
+      createdAt: now - 86400000 * 10,
+      updatedAt: now - 86400000 * 10,
+      synced: 1,
+    },
+    {
+      id: 'chat-9',
+      title: 'Adding bun lint to prompt',
+      messages: [
+        {
+          id: 'msg-9-1',
+          role: 'user',
+          content: 'Configure bun linter script with strict formatting rules.',
+          timestamp: now - 86400000 * 14,
+        },
+        {
+          id: 'msg-9-2',
+          role: 'assistant',
+          content: 'Added `bun lint` command with biome/eslint zero warning thresholds.',
+          timestamp: now - 86400000 * 14 + 1500,
+        },
+      ],
+      lastMessageAt: now - 86400000 * 14,
+      createdAt: now - 86400000 * 14,
+      updatedAt: now - 86400000 * 14,
+      synced: 1,
+    },
+    {
+      id: 'chat-10',
+      title: "Beginner's guide to process management and system commands",
+      messages: [
+        {
+          id: 'msg-10-1',
+          role: 'user',
+          content: 'Write an internal developer guide for managing background processes safely.',
+          timestamp: now - 86400000 * 15,
+        },
+        {
+          id: 'msg-10-2',
+          role: 'assistant',
+          content: 'Comprehensive guide drafted covering signals, PID tracking, and graceful shutdown handlers.',
+          timestamp: now - 86400000 * 15 + 3000,
+        },
+      ],
+      lastMessageAt: now - 86400000 * 15,
+      createdAt: now - 86400000 * 15,
+      updatedAt: now - 86400000 * 15,
+      synced: 1,
+    },
+    {
+      id: 'chat-11',
+      title: 'TPU 8t and 8i serving capacity for Deepseek Flash',
+      messages: [
+        {
+          id: 'msg-11-1',
+          role: 'user',
+          content: 'Calculate memory bandwidth and batch throughput on TPU v5e vs on-device NPU.',
+          timestamp: now - 86400000 * 17,
+        },
+        {
+          id: 'msg-11-2',
+          role: 'assistant',
+          content: 'Detailed latency and FLOPs benchmarking breakdown produced across int8 and bf16 precision.',
+          timestamp: now - 86400000 * 17 + 4500,
+        },
+      ],
+      lastMessageAt: now - 86400000 * 17,
+      createdAt: now - 86400000 * 17,
+      updatedAt: now - 86400000 * 17,
+      synced: 1,
+    },
+  ]
+
+  if (count === 0) {
+    await db.inventory.bulkAdd(initialInventory)
+    await db.staff.bulkAdd(initialStaff)
+    await db.shifts.bulkAdd(initialShifts)
+    await db.documents.bulkAdd(initialDocuments)
+    await db.transactions.bulkAdd(initialTransactions)
+    await db.tasks.bulkAdd(initialTasks)
+    await db.alerts.bulkAdd(initialAlerts)
+    await db.finance.bulkAdd(initialFinance)
+  }
+
+  const chatCount = await db.chatSessions.count()
+  if (chatCount === 0) {
+    await db.chatSessions.bulkAdd(initialChatSessions)
+  }
 }

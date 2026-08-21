@@ -54,7 +54,15 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
   }
 
   // Edit form state
-  const [editFormData, setEditFormData] = useState({
+  const [editFormData, setEditFormData] = useState<{
+    receiptNumber: string
+    cashierName: string
+    posStation: string
+    paymentMethod: POSTransaction['paymentMethod']
+    status: POSTransaction['status']
+    discountPercent: number
+    overrideReason: string
+  }>({
     receiptNumber: '',
     cashierName: '',
     posStation: '',
@@ -66,52 +74,94 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
 
   const activeSearch = searchQuery || localSearch
 
-  const allTransactions = useLiveQuery(() => db.transactions.reverse().toArray()) || []
-
-  // Filtered list
-  const filteredTransactions = useMemo(() => {
-    let list = [...allTransactions]
-
-    if (statusFilter !== 'all') {
-      list = list.filter((t) => t.status === statusFilter)
-    }
-
-    if (methodFilter !== 'all') {
-      list = list.filter((t) => t.paymentMethod === methodFilter)
-    }
-
-    if (activeSearch.trim()) {
-      const q = activeSearch.toLowerCase()
-      list = list.filter(
-        (t) =>
-          t.receiptNumber.toLowerCase().includes(q) ||
-          t.cashierName.toLowerCase().includes(q) ||
-          t.posStation.toLowerCase().includes(q) ||
-          (t.overrideReason && t.overrideReason.toLowerCase().includes(q)) ||
-          t.items?.some((i) => i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q))
-      )
-    }
-
-    return list
-  }, [allTransactions, statusFilter, methodFilter, activeSearch])
-
   // Reset page when filters change
   useEffect(() => {
     setCurrentPage(1)
   }, [statusFilter, methodFilter, activeSearch, pageSize])
 
-  // Paginated records
-  const totalCount = filteredTransactions.length
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
-  const paginatedTransactions = useMemo(() => {
-    const start = (currentPage - 1) * pageSize
-    return filteredTransactions.slice(start, start + pageSize)
-  }, [filteredTransactions, currentPage, pageSize])
+  // Scalable 100k+ Live Query: streaming KPI calculations + indexed DB pagination
+  const {
+    paginatedTransactions,
+    totalCount,
+    totalSalesRevenue,
+    totalTransactionsCount,
+    flaggedCount,
+    avgBasket,
+  } = useLiveQuery(async () => {
+    // 1. Streaming KPI aggregation (Single pass, zero 100k array allocation)
+    let revenue = 0
+    let totalCountAll = 0
+    let flagged = 0
 
-  // Sales KPIs
-  const totalSalesRevenue = allTransactions.reduce((acc, curr) => acc + (curr.status !== 'refunded' ? curr.totalAmount : 0), 0)
-  const flaggedCount = allTransactions.filter((t) => t.status === 'flagged' || t.hasManualOverride).length
-  const avgBasket = allTransactions.length > 0 ? Math.round(totalSalesRevenue / allTransactions.length) : 0
+    await db.transactions.each((txn) => {
+      totalCountAll++
+      if (txn.status !== 'refunded') {
+        revenue += txn.totalAmount
+      }
+      if (txn.status === 'flagged' || txn.hasManualOverride) {
+        flagged++
+      }
+    })
+
+    const avg = totalCountAll > 0 ? Math.round(revenue / totalCountAll) : 0
+
+    // 2. Query with indexed filtering & database-level offset/limit
+    const q = activeSearch.trim().toLowerCase()
+    let filteredCount = 0
+    let matchingTransactions: POSTransaction[] = []
+
+    if (statusFilter !== 'all' && methodFilter === 'all' && !q) {
+      const collection = db.transactions.where('status').equals(statusFilter).reverse()
+      filteredCount = await collection.count()
+      matchingTransactions = await collection.offset((currentPage - 1) * pageSize).limit(pageSize).toArray()
+    } else if (statusFilter === 'all' && methodFilter === 'all' && !q) {
+      const collection = db.transactions.orderBy('createdAt').reverse()
+      filteredCount = await collection.count()
+      matchingTransactions = await collection.offset((currentPage - 1) * pageSize).limit(pageSize).toArray()
+    } else {
+      // Complex compound search & multi-field filter
+      let collection = statusFilter !== 'all'
+        ? db.transactions.where('status').equals(statusFilter).reverse()
+        : db.transactions.orderBy('createdAt').reverse()
+
+      const matches: POSTransaction[] = []
+      await collection.each((txn) => {
+        if (methodFilter !== 'all' && txn.paymentMethod !== methodFilter) {
+          return
+        }
+        if (q) {
+          const matchesSearch =
+            txn.receiptNumber.toLowerCase().includes(q) ||
+            txn.cashierName.toLowerCase().includes(q) ||
+            txn.posStation.toLowerCase().includes(q) ||
+            Boolean(txn.overrideReason && txn.overrideReason.toLowerCase().includes(q)) ||
+            Boolean(txn.items?.some((i) => i.name.toLowerCase().includes(q) || i.sku.toLowerCase().includes(q)))
+          if (!matchesSearch) return
+        }
+        matches.push(txn)
+      })
+
+      filteredCount = matches.length
+      const start = (currentPage - 1) * pageSize
+      matchingTransactions = matches.slice(start, start + pageSize)
+    }
+
+    return {
+      paginatedTransactions: matchingTransactions,
+      totalCount: filteredCount,
+      totalSalesRevenue: revenue,
+      totalTransactionsCount: totalCountAll,
+      flaggedCount: flagged,
+      avgBasket: avg,
+    }
+  }, [statusFilter, methodFilter, activeSearch, currentPage, pageSize]) || {
+    paginatedTransactions: [],
+    totalCount: 0,
+    totalSalesRevenue: 0,
+    totalTransactionsCount: 0,
+    flaggedCount: 0,
+    avgBasket: 0,
+  }
 
   const handlePrintReceipt = () => {
     window.print()
@@ -144,8 +194,8 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
       receiptNumber: editFormData.receiptNumber,
       cashierName: editFormData.cashierName,
       posStation: editFormData.posStation,
-      paymentMethod: editFormData.paymentMethod as any,
-      status: editFormData.status as any,
+      paymentMethod: editFormData.paymentMethod,
+      status: editFormData.status,
       discountPercent: Number(editFormData.discountPercent) || 0,
       discountAmount: discountAmt,
       totalAmount: newTotal,
@@ -302,7 +352,7 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
               ₦{totalSalesRevenue.toLocaleString()}
             </div>
             <span className="text-[11px] text-neutral-400 mt-1 block font-mono">
-              {allTransactions.length} total receipts recorded
+              {totalTransactionsCount} total receipts recorded
             </span>
           </div>
 
@@ -351,7 +401,7 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
             <Filter className="h-3.5 w-3.5 text-neutral-400" />
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
+              onChange={(e) => setStatusFilter(e.target.value as 'all' | POSTransaction['status'] | 'pending')}
               className="rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-1.5 text-xs font-medium text-neutral-700 focus:outline-none"
             >
               <option value="all">All Statuses</option>
@@ -565,7 +615,7 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
                   <label className="block font-bold text-neutral-700 uppercase mb-1">Payment Method</label>
                   <select
                     value={editFormData.paymentMethod}
-                    onChange={(e) => setEditFormData({ ...editFormData, paymentMethod: e.target.value })}
+                    onChange={(e) => setEditFormData({ ...editFormData, paymentMethod: e.target.value as POSTransaction['paymentMethod'] })}
                     className="w-full rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-xs font-semibold focus:bg-white focus:outline-none"
                   >
                     <option value="cash">Cash</option>
@@ -580,7 +630,7 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
                   <label className="block font-bold text-neutral-700 uppercase mb-1">Status</label>
                   <select
                     value={editFormData.status}
-                    onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value })}
+                    onChange={(e) => setEditFormData({ ...editFormData, status: e.target.value as POSTransaction['status'] })}
                     className="w-full rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-xs font-semibold focus:bg-white focus:outline-none"
                   >
                     <option value="completed">Completed</option>

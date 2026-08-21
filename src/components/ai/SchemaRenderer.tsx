@@ -10,7 +10,7 @@ import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 
 interface Props {
-  schema?: Record<string, any>
+  schema?: LLMOutputSchema
   rawText: string
   onApplyAction?: () => void
 }
@@ -30,17 +30,17 @@ export const SchemaRenderer: React.FC<Props> = ({ schema, rawText, onApplyAction
 
   switch (outputType) {
     case 'GENERATIVE_CHART':
-      return <GenerativeChartCard data={schema as any} onApply={onApplyAction} />
+      return <GenerativeChartCard data={schema} onApply={onApplyAction} />
     case 'SHIFT_SCHEDULE':
-      return <ShiftScheduleCard data={schema as any} onApply={onApplyAction} />
+      return <ShiftScheduleCard data={schema} onApply={onApplyAction} />
     case 'RED_FLAG_ALERT':
-      return <RedFlagAlertCard data={schema as any} onApply={onApplyAction} />
+      return <RedFlagAlertCard data={schema} onApply={onApplyAction} />
     case 'AUTO_TASK':
-      return <AutoTaskCard data={schema as any} onApply={onApplyAction} />
+      return <AutoTaskCard data={schema} onApply={onApplyAction} />
     case 'DOCUMENT_OUTPUT':
-      return <DocumentCard data={schema as any} onApply={onApplyAction} />
+      return <DocumentCard data={schema} onApply={onApplyAction} />
     case 'DEEP_RESEARCH':
-      return <DeepResearchCard data={schema as any} />
+      return <DeepResearchCard data={schema} />
     case 'CONVERSATIONAL_CHAT':
       return (
         <div className="prose prose-sm text-neutral-800 leading-relaxed break-words">
@@ -52,15 +52,11 @@ export const SchemaRenderer: React.FC<Props> = ({ schema, rawText, onApplyAction
     default:
       return (
         <div className="space-y-2">
-          {schema.message ? (
-            <p className="text-neutral-800 text-sm leading-relaxed">{schema.message}</p>
-          ) : (
-            <div className="prose prose-sm text-neutral-800 leading-relaxed break-words">
-              <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                {rawText}
-              </ReactMarkdown>
-            </div>
-          )}
+          <div className="prose prose-sm text-neutral-800 leading-relaxed break-words">
+            <ReactMarkdown remarkPlugins={[remarkGfm]}>
+              {rawText}
+            </ReactMarkdown>
+          </div>
         </div>
       )
   }

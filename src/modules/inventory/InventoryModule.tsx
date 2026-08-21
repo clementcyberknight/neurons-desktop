@@ -91,56 +91,70 @@ export const InventoryModule: React.FC<Props> = ({ searchQuery: externalSearchQu
     setCurrentPage(1)
   }, [localSearch, externalSearchQuery, typeFilter, categoryFilter, statusFilter, pageSize])
 
-  // Paginated and Filtered Query
+  // Paginated and Filtered Query (Optimized for 100k scale)
   const { inventory, totalCount, totalPages, lowStockCount } = useLiveQuery(async () => {
-    let all = await db.inventory.toArray()
     const query = (localSearch || externalSearchQuery).trim().toLowerCase()
 
-    let countLow = all.filter((i) => i.quantity <= i.minThreshold).length
+    // 1. Calculate lowStockCount via single-pass cursor streaming
+    let countLow = 0
+    await db.inventory.each((i) => {
+      if (i.quantity <= i.minThreshold) countLow++
+    })
 
-    // 1. Text Search Filter
-    if (query) {
-      all = all.filter(
-        (i) =>
-          i.name.toLowerCase().includes(query) ||
-          i.sku.toLowerCase().includes(query) ||
-          (i.brand && i.brand.toLowerCase().includes(query)) ||
-          (i.supplier && i.supplier.toLowerCase().includes(query)) ||
-          (i.category && i.category.toLowerCase().includes(query)) ||
-          (i.salesChannel && i.salesChannel.toLowerCase().includes(query))
-      )
+    // 2. Query with indexed offset & limit
+    let filteredCount = 0
+    let paginatedSlice: InventoryItem[] = []
+
+    if (typeFilter === 'ALL' && categoryFilter === 'ALL' && statusFilter === 'ALL' && !query) {
+      const collection = db.inventory.orderBy('updatedAt').reverse()
+      filteredCount = await collection.count()
+      paginatedSlice = await collection.offset((currentPage - 1) * pageSize).limit(pageSize).toArray()
+    } else if (typeFilter !== 'ALL' && categoryFilter === 'ALL' && statusFilter === 'ALL' && !query) {
+      const collection = db.inventory.where('type').equals(typeFilter).reverse()
+      filteredCount = await collection.count()
+      paginatedSlice = await collection.offset((currentPage - 1) * pageSize).limit(pageSize).toArray()
+    } else {
+      const matches: InventoryItem[] = []
+      const collection = typeFilter !== 'ALL'
+        ? db.inventory.where('type').equals(typeFilter).reverse()
+        : db.inventory.orderBy('updatedAt').reverse()
+
+      await collection.each((i) => {
+        if (categoryFilter !== 'ALL' && !i.category.toLowerCase().includes(categoryFilter.toLowerCase())) {
+          return
+        }
+        if (statusFilter === 'LOW_STOCK' && !(i.quantity > 0 && i.quantity <= i.minThreshold)) {
+          return
+        }
+        if (statusFilter === 'OUT_OF_STOCK' && i.quantity !== 0) {
+          return
+        }
+        if (statusFilter === 'IN_STOCK' && !(i.quantity > i.minThreshold)) {
+          return
+        }
+        if (query) {
+          const matchesQuery =
+            i.name.toLowerCase().includes(query) ||
+            i.sku.toLowerCase().includes(query) ||
+            Boolean(i.brand && i.brand.toLowerCase().includes(query)) ||
+            Boolean(i.supplier && i.supplier.toLowerCase().includes(query)) ||
+            Boolean(i.category && i.category.toLowerCase().includes(query)) ||
+            Boolean(i.salesChannel && i.salesChannel.toLowerCase().includes(query))
+          if (!matchesQuery) return
+        }
+        matches.push(i)
+      })
+
+      filteredCount = matches.length
+      const start = (currentPage - 1) * pageSize
+      paginatedSlice = matches.slice(start, start + pageSize)
     }
 
-    // 2. Type Filter
-    if (typeFilter !== 'ALL') {
-      all = all.filter((i) => (i.type || 'Finished Good') === typeFilter)
-    }
-
-    // 3. Category Filter
-    if (categoryFilter !== 'ALL') {
-      all = all.filter((i) => i.category.toLowerCase().includes(categoryFilter.toLowerCase()))
-    }
-
-    // 4. Status Filter
-    if (statusFilter === 'LOW_STOCK') {
-      all = all.filter((i) => i.quantity > 0 && i.quantity <= i.minThreshold)
-    } else if (statusFilter === 'OUT_OF_STOCK') {
-      all = all.filter((i) => i.quantity === 0)
-    } else if (statusFilter === 'IN_STOCK') {
-      all = all.filter((i) => i.quantity > i.minThreshold)
-    }
-
-    all.sort((a, b) => b.updatedAt - a.updatedAt)
-
-    const count = all.length
-    const pages = Math.max(1, Math.ceil(count / pageSize))
-    const validPage = Math.min(currentPage, pages)
-    const startIndex = (validPage - 1) * pageSize
-    const paginatedSlice = all.slice(startIndex, startIndex + pageSize)
+    const pages = Math.max(1, Math.ceil(filteredCount / pageSize))
 
     return {
       inventory: paginatedSlice,
-      totalCount: count,
+      totalCount: filteredCount,
       totalPages: pages,
       lowStockCount: countLow,
     }
@@ -511,7 +525,7 @@ export const InventoryModule: React.FC<Props> = ({ searchQuery: externalSearchQu
             {/* Product Type Filter */}
             <select
               value={typeFilter}
-              onChange={(e) => setTypeFilter(e.target.value as any)}
+              onChange={(e) => setTypeFilter(e.target.value as 'ALL' | 'Finished Good' | 'Raw Material')}
               className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Types</option>
@@ -534,7 +548,7 @@ export const InventoryModule: React.FC<Props> = ({ searchQuery: externalSearchQu
             {/* Stock Health Filter */}
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value as any)}
+              onChange={(e) => setStatusFilter(e.target.value as 'ALL' | 'IN_STOCK' | 'LOW_STOCK' | 'OUT_OF_STOCK')}
               className="rounded-lg border border-neutral-200 bg-white px-2.5 py-1.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 focus:outline-none cursor-pointer"
             >
               <option value="ALL">All Stock Status</option>
@@ -800,7 +814,7 @@ export const InventoryModule: React.FC<Props> = ({ searchQuery: externalSearchQu
                   </label>
                   <select
                     value={formData.type}
-                    onChange={(e) => setFormData({ ...formData, type: e.target.value as any })}
+                    onChange={(e) => setFormData({ ...formData, type: e.target.value as 'Finished Good' | 'Raw Material' })}
                     className="w-full rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2 text-xs text-neutral-900 focus:bg-white focus:border-neutral-800 focus:outline-none transition-all cursor-pointer font-medium"
                   >
                     <option value="Finished Good">Finished Good</option>

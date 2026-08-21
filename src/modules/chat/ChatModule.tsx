@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import {
   Plus,
   ArrowUp,
@@ -16,60 +16,126 @@ import {
   Pencil,
   ArrowDown,
   RefreshCw,
+  MessageSquare,
+  ChevronDown,
+  ArrowLeft,
+  Trash2,
+  CheckSquare,
+  Square,
+  Clock,
+  Maximize2,
+  Minimize2,
+  Mic,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
+import { useLiveQuery } from 'dexie-react-hooks'
 import { SchemaRenderer } from '@/components/ai/SchemaRenderer'
-
-export interface ChatMessage {
-  id: string
-  role: 'user' | 'assistant'
-  content: string
-  parsedJson?: Record<string, any>
-  outputType?: string
-  latencyMs?: number
-  timestamp: number
-  thinkMode?: boolean
-}
+import type { LLMOutputSchema } from '@/types/schemas'
+import { db } from '@/db/localDb'
+import type { ChatMessage, ChatSession } from '@/types/database'
 
 interface Props {
+  activeChatId?: string | null
+  viewMode?: 'history_list' | 'chat'
+  onViewModeChange?: (mode: 'history_list' | 'chat') => void
+  onChatCreated?: (id: string | null) => void
   onAskAI?: (prompt: string) => void
 }
 
-const BUSINESS_SUGGESTIONS = [
-  {
-    icon: ShieldAlert,
-    title: 'Audit Cashier Overrides',
-    prompt: 'Alert management: Check for unauthorized discount overrides or till float shortfalls in POS Station 3.',
-  },
-  {
-    icon: BarChart3,
-    title: 'Warehouse Stock Chart',
-    prompt: 'Generate a chart showing pallet SKU quantities across warehouse Zone A, Zone B, Zone C, and Zone D.',
-  },
-  {
-    icon: Calendar,
-    title: 'Pharmacist Shift Rota',
-    prompt: 'Build a weekly shift schedule for 3 pharmacists: Dr. Sarah, Mr. David, and Ms. Clara starting next Monday.',
-  },
-  {
-    icon: Search,
-    title: 'Cost & Variance Audit',
-    prompt: 'Investigate internal expense records to identify why software licenses and operational costs exceeded forecast.',
-  },
-]
+function formatRelativeTime(timestamp: number): string {
+  const diff = Date.now() - timestamp
+  const minutes = Math.floor(diff / (1000 * 60))
+  if (minutes < 1) return 'Just now'
+  if (minutes < 60) return `${minutes} minutes ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours === 1) return '1 hour ago'
+  if (hours < 24) return `${hours} hours ago`
+  const days = Math.floor(hours / 24)
+  if (days === 1) return '1 day ago'
+  if (days < 7) return `${days} days ago`
 
-export const ChatModule: React.FC<Props> = () => {
+  const date = new Date(timestamp)
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  return `${monthNames[date.getMonth()]} ${date.getDate()}`
+}
+
+export const ChatModule: React.FC<Props> = ({
+  activeChatId,
+  viewMode = 'chat',
+  onViewModeChange,
+  onChatCreated,
+}) => {
+  // Query all sessions for the Chats and tasks overview list
+  const allSessions =
+    useLiveQuery(() => db.chatSessions.orderBy('lastMessageAt').reverse().toArray()) || []
+
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(activeChatId ?? null)
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [thinkMode, setThinkMode] = useState(false)
   const [copiedId, setCopiedId] = useState<string | null>(null)
   const [showScrollBottom, setShowScrollBottom] = useState(false)
+  const [isExpanded, setIsExpanded] = useState(false)
+
+  // Overview list state
+  const [searchQuery, setSearchQuery] = useState('')
+  const [showSearchInput, setShowSearchInput] = useState(false)
+  const [filterType, setFilterType] = useState<'All' | 'Chats' | 'Tasks'>('All')
+  const [isSelectMode, setIsSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
 
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const inputRef = useRef<HTMLInputElement>(null)
+  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const emptyTextareaRef = useRef<HTMLTextAreaElement>(null)
+
+  // Sync with prop when activeChatId changes from sidebar
+  useEffect(() => {
+    setCurrentSessionId(activeChatId ?? null)
+  }, [activeChatId])
+
+  // Auto-adjust textarea heights for multiline
+  useEffect(() => {
+    const adjustRef = (ref: React.RefObject<HTMLTextAreaElement | null>) => {
+      if (!ref.current) return
+      if (isExpanded) {
+        ref.current.style.height = '240px'
+      } else {
+        ref.current.style.height = 'auto'
+        const sHeight = ref.current.scrollHeight
+        ref.current.style.height = `${Math.min(Math.max(sHeight, 24), 160)}px`
+      }
+    }
+
+    adjustRef(textareaRef)
+    adjustRef(emptyTextareaRef)
+  }, [input, isExpanded])
+
+  // Load chat session messages when currentSessionId changes
+  useEffect(() => {
+    if (!currentSessionId) {
+      setMessages([])
+      return
+    }
+
+    const loadSession = async () => {
+      try {
+        const session = await db.chatSessions.get(currentSessionId)
+        if (session && session.messages) {
+          setMessages(session.messages)
+        } else {
+          setMessages([])
+        }
+      } catch (err) {
+        console.error('Failed to load chat session:', err)
+        setMessages([])
+      }
+    }
+
+    loadSession()
+  }, [currentSessionId])
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -93,6 +159,49 @@ export const ChatModule: React.FC<Props> = () => {
     setTimeout(() => setCopiedId(null), 2000)
   }
 
+  // Filtered sessions for the overview list
+  const filteredSessions = useMemo(() => {
+    let list = [...allSessions]
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase()
+      list = list.filter((s) => s.title.toLowerCase().includes(q))
+    }
+    return list
+  }, [allSessions, searchQuery])
+
+  const handleOpenSession = (id: string) => {
+    setCurrentSessionId(id)
+    onChatCreated?.(id)
+    onViewModeChange?.('chat')
+  }
+
+  const handleStartNewChat = () => {
+    setCurrentSessionId(null)
+    setMessages([])
+    onChatCreated?.(null)
+    onViewModeChange?.('chat')
+  }
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
+    )
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.length === 0) return
+    try {
+      await db.chatSessions.bulkDelete(selectedIds)
+      setSelectedIds([])
+      setIsSelectMode(false)
+      if (currentSessionId && selectedIds.includes(currentSessionId)) {
+        handleStartNewChat()
+      }
+    } catch (e) {
+      console.error('Failed to delete selected sessions:', e)
+    }
+  }
+
   const handleSend = async (textToSend?: string) => {
     const promptText = (textToSend || input).trim()
     if (!promptText || loading) return
@@ -105,16 +214,33 @@ export const ChatModule: React.FC<Props> = () => {
       thinkMode,
     }
 
-    setMessages((prev) => [...prev, userMsg])
+    const newMessages = [...messages, userMsg]
+    setMessages(newMessages)
     setInput('')
+    setIsExpanded(false)
     setLoading(true)
 
     const t0 = Date.now()
 
     try {
-      let response: any
-      if (typeof window !== 'undefined' && (window as any).electronAPI) {
-        response = await (window as any).electronAPI.generateAI({ prompt: promptText })
+      let response: {
+        raw?: string
+        parsedJson?: LLMOutputSchema
+        outputType?: string
+        latencyMs?: number
+      } = {
+        raw: '',
+        outputType: 'CONVERSATIONAL_CHAT',
+        latencyMs: 0,
+      }
+
+      if (typeof window !== 'undefined' && window.electronAPI) {
+        const result = await window.electronAPI.generateAI({ prompt: promptText })
+        response = {
+          raw: result.data || result.error || 'No response generated',
+          outputType: 'CONVERSATIONAL_CHAT',
+          latencyMs: 300,
+        }
       } else {
         // Fallback simulation in dev
         await new Promise((r) => setTimeout(r, 450))
@@ -210,150 +336,360 @@ export const ChatModule: React.FC<Props> = () => {
         timestamp: Date.now(),
       }
 
-      setMessages((prev) => [...prev, assistantMsg])
+      const finalMessages = [...newMessages, assistantMsg]
+      setMessages(finalMessages)
+
+      // Persist to Dexie ChatSession table
+      try {
+        const now = Date.now()
+        if (currentSessionId) {
+          await db.chatSessions.update(currentSessionId, {
+            messages: finalMessages,
+            lastMessageAt: now,
+            updatedAt: now,
+            synced: 0,
+          })
+        } else {
+          const newId = `chat-${now}`
+          const title = promptText.length > 42 ? promptText.slice(0, 42).trim() + '...' : promptText
+          await db.chatSessions.add({
+            id: newId,
+            title,
+            messages: finalMessages,
+            lastMessageAt: now,
+            createdAt: now,
+            updatedAt: now,
+            synced: 0,
+          })
+          setCurrentSessionId(newId)
+          onChatCreated?.(newId)
+        }
+      } catch (saveErr) {
+        console.error('Failed to persist chat session to local database:', saveErr)
+      }
     } catch (err) {
       console.error('AI Error:', err)
-      setMessages((prev) => [
-        ...prev,
-        {
-          id: `msg-err-${Date.now()}`,
-          role: 'assistant',
-          content: '⚠️ Offline AI engine encountered an error. Please try again.',
-          timestamp: Date.now(),
-        },
-      ])
+      const errMsg: ChatMessage = {
+        id: `msg-err-${Date.now()}`,
+        role: 'assistant',
+        content: '⚠️ Offline AI engine encountered an error. Please try again.',
+        timestamp: Date.now(),
+      }
+      setMessages([...newMessages, errMsg])
     } finally {
       setLoading(false)
     }
   }
 
-  return (
-    <div className="flex flex-col h-full bg-white relative select-none font-sans overflow-hidden">
-      {/* Empty State / Start Screen */}
-      {messages.length === 0 ? (
-        <div className="flex-1 flex flex-col items-center justify-center px-4 max-w-3xl mx-auto w-full -mt-10">
-          {/* Centered Heading */}
-          <h2 className="text-2xl sm:text-3xl font-medium text-neutral-800 tracking-tight text-center mb-6">
-            Where should we begin?
-          </h2>
+  // ═════════════════════════════════════════════════════════════════
+  // VIEW 1: FULL "CHATS AND TASKS" OVERVIEW LIST PAGE (WHITE THEME)
+  // ═════════════════════════════════════════════════════════════════
+  if (viewMode === 'history_list') {
+    return (
+      <div className="flex flex-col h-full bg-white text-neutral-900 font-sans select-none overflow-y-auto no-scrollbar">
+        {/* Top Header Toolbar with Clean White Theme */}
+        <div className="max-w-4xl w-full mx-auto px-6 pt-10 pb-6">
+          <div className="flex items-center justify-between gap-4">
+            <h1 className="text-2xl sm:text-3xl font-bold text-neutral-900 tracking-tight">
+              Chats and tasks
+            </h1>
 
-          {/* Sleek Prompt Capsule Bar */}
-          <div className="w-full max-w-2xl bg-white border border-neutral-200 rounded-full px-3 py-2 shadow-sm hover:shadow-md focus-within:shadow-md focus-within:border-neutral-300 transition-all flex items-center gap-2">
-            {/* Left '+' Attachment Action */}
-            <button
-              type="button"
-              onClick={() => inputRef.current?.focus()}
-              className="p-1.5 rounded-full hover:bg-neutral-100 text-neutral-600 hover:text-black transition-colors shrink-0 cursor-pointer"
-              title="Add attachment / context"
-            >
-              <Plus className="h-5 w-5" />
-            </button>
-
-            {/* Input Field */}
-            <input
-              ref={inputRef}
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && !e.shiftKey) {
-                  e.preventDefault()
-                  handleSend()
-                }
-              }}
-              placeholder="Ask anything"
-              autoFocus
-              className="flex-1 text-sm text-neutral-800 placeholder-neutral-400 bg-transparent focus:outline-none px-1"
-            />
-
-            {/* Right Controls: Think toggle + Blue Send Action */}
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2">
+              {/* Search Toggle Button */}
               <button
-                type="button"
-                onClick={() => setThinkMode((prev) => !prev)}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
-                  thinkMode
-                    ? 'bg-neutral-900 text-white'
-                    : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
+                onClick={() => setShowSearchInput((prev) => !prev)}
+                className={`p-2 rounded-xl border transition-all cursor-pointer shadow-2xs ${
+                  showSearchInput
+                    ? 'bg-neutral-100 border-neutral-300 text-neutral-900'
+                    : 'bg-white border-neutral-200 text-neutral-600 hover:text-neutral-900 hover:bg-neutral-50'
                 }`}
-                title="Deep Thinking Mode"
+                title="Search chats & tasks"
               >
-                <Brain className="h-3.5 w-3.5" />
-                <span>Think</span>
+                <Search className="h-4 w-4" />
               </button>
 
+              {/* Filter Dropdown */}
+              <div className="relative">
+                <button
+                  onClick={() => setFilterType((prev) => (prev === 'All' ? 'Chats' : prev === 'Chats' ? 'Tasks' : 'All'))}
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-neutral-200 bg-white text-xs font-medium text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900 transition-all cursor-pointer shadow-2xs"
+                >
+                  <span className="text-neutral-400">Filter by</span>
+                  <span className="text-neutral-900 font-semibold">{filterType}</span>
+                  <ChevronDown className="h-3.5 w-3.5 text-neutral-400 ml-0.5" />
+                </button>
+              </div>
+
+              {/* Select Button */}
               <button
-                type="button"
-                onClick={() => handleSend()}
-                disabled={!input.trim()}
-                className={`h-8 w-8 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs ${
-                  input.trim()
-                    ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                    : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
+                onClick={() => {
+                  setIsSelectMode((prev) => !prev)
+                  setSelectedIds([])
+                }}
+                className={`px-3.5 py-1.5 rounded-xl text-xs font-medium border transition-all cursor-pointer shadow-2xs ${
+                  isSelectMode
+                    ? 'bg-black text-white border-black font-semibold'
+                    : 'bg-white border-neutral-200 text-neutral-700 hover:bg-neutral-50 hover:text-neutral-900'
                 }`}
-                title="Send message"
               >
-                <ArrowUp className="h-4 w-4" />
+                {isSelectMode ? 'Done' : 'Select'}
+              </button>
+
+              {/* New Button */}
+              <button
+                onClick={handleStartNewChat}
+                className="px-4 py-1.5 rounded-xl bg-black text-white hover:bg-neutral-800 text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                New
               </button>
             </div>
           </div>
 
-          {/* Quick Business Prompts Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 mt-8 w-full max-w-2xl">
-            {BUSINESS_SUGGESTIONS.map((item, idx) => {
-              const Icon = item.icon
+          {/* Collapsible Search Input */}
+          {showSearchInput && (
+            <div className="mt-4">
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search conversation history..."
+                className="w-full rounded-xl bg-neutral-50 border border-neutral-200 px-4 py-2.5 text-sm text-neutral-900 placeholder-neutral-400 focus:bg-white focus:outline-none focus:border-neutral-900 transition-all shadow-2xs"
+                autoFocus
+              />
+            </div>
+          )}
+
+          {/* Batch Selection Action Bar */}
+          {isSelectMode && selectedIds.length > 0 && (
+            <div className="mt-4 p-3 rounded-xl bg-neutral-50 border border-neutral-200 flex items-center justify-between text-xs shadow-2xs">
+              <span className="text-neutral-700 font-medium">
+                {selectedIds.length} item{selectedIds.length > 1 ? 's' : ''} selected
+              </span>
+              <button
+                onClick={handleDeleteSelected}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white font-medium transition-colors cursor-pointer shadow-xs"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete Selected</span>
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* Main List of Conversations */}
+        <div className="max-w-4xl w-full mx-auto px-6 pb-16 flex-1">
+          <div className="divide-y divide-neutral-100">
+            {filteredSessions.map((session) => {
+              const isSelected = selectedIds.includes(session.id)
               return (
-                <button
-                  key={idx}
-                  onClick={() => handleSend(item.prompt)}
-                  className="group flex items-start gap-3 p-3 rounded-2xl border border-neutral-200 bg-white hover:bg-neutral-50/80 hover:border-neutral-300 transition-all text-left shadow-2xs cursor-pointer"
+                <div
+                  key={session.id}
+                  onClick={() => {
+                    if (isSelectMode) {
+                      handleToggleSelect(session.id)
+                    } else {
+                      handleOpenSession(session.id)
+                    }
+                  }}
+                  className={`group flex items-center justify-between py-3.5 px-3 -mx-3 rounded-xl transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-neutral-100/80'
+                      : 'hover:bg-neutral-50 text-neutral-800'
+                  }`}
                 >
-                  <div className="p-2 rounded-xl bg-neutral-100 group-hover:bg-white text-neutral-800 transition-colors shrink-0">
-                    <Icon className="h-4 w-4" />
+                  <div className="flex items-center gap-3.5 min-w-0 flex-1 pr-4">
+                    {isSelectMode ? (
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation()
+                          handleToggleSelect(session.id)
+                        }}
+                        className="text-neutral-400 hover:text-neutral-900"
+                      >
+                        {isSelected ? (
+                          <CheckSquare className="h-4 w-4 text-neutral-900" />
+                        ) : (
+                          <Square className="h-4 w-4" />
+                        )}
+                      </button>
+                    ) : (
+                      <MessageSquare className="h-4 w-4 text-neutral-400 group-hover:text-neutral-700 shrink-0 transition-colors" />
+                    )}
+                    <span className="text-sm font-medium text-neutral-900 truncate">
+                      {session.title}
+                    </span>
                   </div>
-                  <div>
-                    <h4 className="text-xs font-semibold text-neutral-900">{item.title}</h4>
-                    <p className="text-[11px] text-neutral-500 line-clamp-1 mt-0.5">{item.prompt}</p>
+
+                  <div className="text-xs text-neutral-400 font-normal shrink-0 pl-4 group-hover:text-neutral-600 transition-colors">
+                    {formatRelativeTime(session.lastMessageAt || session.createdAt)}
                   </div>
-                </button>
+                </div>
               )
             })}
+
+            {filteredSessions.length === 0 && (
+              <div className="py-16 text-center text-neutral-400 text-sm">
+                No conversation history found. Click <span className="text-neutral-900 font-semibold cursor-pointer underline" onClick={handleStartNewChat}>New</span> to start a new chat.
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // ═════════════════════════════════════════════════════════════════
+  // VIEW 2: CONVERSATION / NEW CHAT DETAIL VIEW
+  // ═════════════════════════════════════════════════════════════════
+  const activeSession = allSessions.find((s) => s.id === currentSessionId)
+
+  return (
+    <div className="flex flex-col h-full bg-white relative select-none font-sans overflow-hidden">
+      {/* Clean Start Screen Matching Screenshot ("Good to see you, Akhimien.") */}
+      {messages.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center px-4 max-w-3xl mx-auto w-full -mt-16">
+          <div className="text-center mb-8">
+            <h1 className="text-2xl sm:text-3xl font-medium text-neutral-800 tracking-tight">
+              Good to see you, Akhimien.
+            </h1>
+          </div>
+
+          {/* Clean Centered Floating Multiline Input Capsule */}
+          <div className="w-full max-w-2xl">
+            <div
+              className={`rounded-3xl border border-neutral-200 bg-[#f4f4f4] px-4 py-3 flex flex-col justify-between focus-within:bg-white focus-within:border-neutral-300 focus-within:shadow-xs transition-all ${
+                isExpanded ? 'min-h-[300px]' : 'min-h-[64px]'
+              }`}
+            >
+              {/* Textarea + Expand button in top row */}
+              <div className="flex items-start justify-between w-full gap-2">
+                <textarea
+                  ref={emptyTextareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSend()
+                    }
+                  }}
+                  placeholder="Ask anything"
+                  rows={1}
+                  className={`w-full bg-transparent text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none resize-none no-scrollbar leading-relaxed ${
+                    isExpanded ? 'h-[230px] overflow-y-auto' : 'max-h-[160px]'
+                  }`}
+                  autoFocus
+                />
+
+                <button
+                  type="button"
+                  onClick={() => setIsExpanded((prev) => !prev)}
+                  className="p-1 rounded-md text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200/60 transition-colors cursor-pointer shrink-0"
+                  title={isExpanded ? 'Collapse input' : 'Expand input fully'}
+                >
+                  {isExpanded ? (
+                    <Minimize2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  )}
+                </button>
+              </div>
+
+              {/* Bottom Toolbar: Attach on left, Think + Mic + Send on right */}
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  className="p-1.5 rounded-full text-neutral-500 hover:text-neutral-900 hover:bg-neutral-200/70 transition-colors cursor-pointer shrink-0"
+                  title="Attach files or context"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setThinkMode((prev) => !prev)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer ${
+                      thinkMode
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-neutral-500 hover:bg-neutral-200/70 hover:text-neutral-800'
+                    }`}
+                  >
+                    <Brain className="h-3.5 w-3.5" />
+                    <span>Think</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200/50 transition-colors cursor-pointer"
+                    title="Voice input"
+                  >
+                    <Mic className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSend()}
+                    disabled={!input.trim() || loading}
+                    className={`h-8 w-8 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                      input.trim()
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                        : 'bg-neutral-300/80 text-white cursor-not-allowed'
+                    }`}
+                    title="Send message"
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Disclaimer Text */}
+            <div className="text-center text-[11px] text-neutral-400 mt-2 select-none">
+              Neurons can make mistakes. Check important info.
+            </div>
           </div>
         </div>
       ) : (
-        /* Active Conversation Stream */
-        <div className="flex-1 flex flex-col overflow-hidden relative">
-          <div
-            ref={scrollContainerRef}
-            onScroll={handleScroll}
-            className="flex-1 overflow-y-auto no-scrollbar p-4 sm:p-6 space-y-6 max-w-3xl mx-auto w-full [&::-webkit-scrollbar]:hidden"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
-            {messages.map((msg) => {
-              const isUser = msg.role === 'user'
+        /* Conversation Feed */
+        <div
+          ref={scrollContainerRef}
+          onScroll={handleScroll}
+          className="flex-1 overflow-y-auto px-4 py-6 no-scrollbar space-y-6 max-w-3xl mx-auto w-full"
+        >
+          {/* Centered Session Timestamp */}
+          <div className="text-center text-xs text-neutral-400 select-none pb-2">
+            {activeSession
+              ? formatRelativeTime(activeSession.createdAt)
+              : 'Today'}
+          </div>
 
-              return (
+          {messages.map((msg) => {
+            const isUser = msg.role === 'user'
+            return (
+              <div
+                key={msg.id}
+                className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} group`}
+              >
                 <div
-                  key={msg.id}
-                  className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} group`}
+                  className={`max-w-[85%] text-sm leading-relaxed ${
+                    isUser
+                      ? 'bg-[#f4f4f4] text-neutral-900 px-4 py-3 rounded-2xl rounded-br-xs'
+                      : 'bg-transparent text-neutral-900 px-1 py-1'
+                  }`}
                 >
-                  {/* Message Body */}
                   {isUser ? (
-                    /* User Prompt: Clean soft badge on right, NO avatar */
-                    <div className="max-w-[80%] rounded-3xl bg-[#f0f4f9] px-4 py-2.5 text-sm text-neutral-900 leading-relaxed">
-                      <p className="whitespace-pre-wrap">{msg.content}</p>
-                    </div>
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
                   ) : (
-                    /* AI Assistant: Free flowing text on white canvas, NO bot avatar, NO container border */
-                    <div className="w-full text-neutral-900 text-[14px] leading-relaxed">
+                    <div className="space-y-3">
                       {msg.parsedJson ? (
                         <SchemaRenderer
                           schema={msg.parsedJson}
                           rawText={msg.content}
-                          onApplyAction={() => {}}
                         />
                       ) : (
-                        <div className="prose prose-sm max-w-none text-neutral-800 leading-relaxed prose-headings:font-semibold prose-headings:text-neutral-900 prose-p:my-2 prose-ul:my-2 prose-li:my-0.5">
+                        <div className="prose prose-sm text-neutral-900 break-words leading-relaxed">
                           <ReactMarkdown remarkPlugins={[remarkGfm]}>
                             {msg.content}
                           </ReactMarkdown>
@@ -361,138 +697,140 @@ export const ChatModule: React.FC<Props> = () => {
                       )}
                     </div>
                   )}
-
-                  {/* Action Toolbar Below Message */}
-                  {isUser ? (
-                    <div className="flex items-center gap-1.5 mt-1.5 opacity-0 group-hover:opacity-100 transition-opacity text-neutral-400">
-                      <button
-                        onClick={() => handleCopy(msg.content, msg.id)}
-                        className="p-1 rounded hover:bg-neutral-100 hover:text-neutral-700 transition-colors cursor-pointer"
-                        title="Copy text"
-                      >
-                        {copiedId === msg.id ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                      </button>
-                      <button
-                        onClick={() => setInput(msg.content)}
-                        className="p-1 rounded hover:bg-neutral-100 hover:text-neutral-700 transition-colors cursor-pointer"
-                        title="Edit prompt"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="flex items-center gap-2 mt-2 text-neutral-400">
-                      <button
-                        onClick={() => handleCopy(msg.content, msg.id)}
-                        className="p-1 rounded hover:bg-neutral-100 hover:text-neutral-700 transition-colors cursor-pointer"
-                        title="Copy response"
-                      >
-                        {copiedId === msg.id ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                      </button>
-                      <button
-                        onClick={() => handleCopy(msg.content, `${msg.id}-share`)}
-                        className="p-1 rounded hover:bg-neutral-100 hover:text-neutral-700 transition-colors cursor-pointer"
-                        title="Share"
-                      >
-                        <Share2 className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleSend(messages[messages.length - 2]?.content || msg.content)}
-                        className="p-1 rounded hover:bg-neutral-100 hover:text-neutral-700 transition-colors cursor-pointer"
-                        title="Regenerate response"
-                      >
-                        <RotateCcw className="h-3.5 w-3.5" />
-                      </button>
-                      <button
-                        className="p-1 rounded hover:bg-neutral-100 hover:text-neutral-700 transition-colors cursor-pointer"
-                        title="More options"
-                      >
-                        <MoreHorizontal className="h-3.5 w-3.5" />
-                      </button>
-                    </div>
-                  )}
                 </div>
-              )
-            })}
 
-            {loading && (
-              <div className="flex items-center gap-2 text-neutral-500 text-xs py-2">
-                <RefreshCw className="h-3.5 w-3.5 animate-spin text-neutral-600" />
-                <span>Generating offline response...</span>
+                {/* Message Action Bar (Copy / Feedback) */}
+                {!isUser && (
+                  <div className="flex items-center gap-1 mt-1.5 px-1 text-neutral-400">
+                    <button
+                      onClick={() => handleCopy(msg.content, msg.id)}
+                      className="p-1 rounded-md hover:bg-neutral-100 hover:text-neutral-700 transition-colors cursor-pointer"
+                      title="Copy response"
+                    >
+                      {copiedId === msg.id ? (
+                        <Check className="h-3.5 w-3.5 text-emerald-600" />
+                      ) : (
+                        <Copy className="h-3.5 w-3.5" />
+                      )}
+                    </button>
+                    {msg.latencyMs && (
+                      <span className="text-[10px] font-mono text-neutral-400 ml-1">
+                        {msg.latencyMs}ms
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
-            )}
+            )
+          })}
 
-            <div ref={messagesEndRef} />
-          </div>
-
-          {/* Floating Scroll To Bottom Button */}
-          {showScrollBottom && (
-            <div className="absolute bottom-20 left-1/2 -translate-x-1/2 z-10">
-              <button
-                onClick={scrollToBottom}
-                className="h-8 w-8 rounded-full bg-white border border-neutral-200 shadow-md flex items-center justify-center text-neutral-600 hover:text-black hover:bg-neutral-50 transition-all cursor-pointer"
-                title="Scroll to bottom"
-              >
-                <ArrowDown className="h-4 w-4" />
-              </button>
+          {/* Loading Typing Indicator */}
+          {loading && (
+            <div className="flex items-center gap-2 text-neutral-400 py-2">
+              <div className="h-2 w-2 rounded-full bg-neutral-400 animate-bounce" />
+              <div className="h-2 w-2 rounded-full bg-neutral-400 animate-bounce [animation-delay:0.2s]" />
+              <div className="h-2 w-2 rounded-full bg-neutral-400 animate-bounce [animation-delay:0.4s]" />
             </div>
           )}
 
-          {/* Fixed Bottom Capsule Input */}
-          <div className="p-4 bg-white shrink-0">
-            <div className="w-full max-w-2xl mx-auto bg-white border border-neutral-200 rounded-full px-3 py-2 shadow-sm hover:shadow-md focus-within:shadow-md focus-within:border-neutral-300 transition-all flex items-center gap-2">
-              <button
-                type="button"
-                className="p-1.5 rounded-full hover:bg-neutral-100 text-neutral-600 hover:text-black transition-colors shrink-0 cursor-pointer"
-                title="Add attachment / context"
-              >
-                <Plus className="h-5 w-5" />
-              </button>
+          <div ref={messagesEndRef} />
+        </div>
+      )}
 
-              <input
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && !e.shiftKey) {
-                    e.preventDefault()
-                    handleSend()
-                  }
-                }}
-                placeholder="Ask anything"
-                disabled={loading}
-                className="flex-1 text-sm text-neutral-800 placeholder-neutral-400 bg-transparent focus:outline-none px-1"
-              />
-
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setThinkMode((prev) => !prev)}
-                  className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-all cursor-pointer ${
-                    thinkMode
-                      ? 'bg-neutral-900 text-white'
-                      : 'text-neutral-600 hover:bg-neutral-100 hover:text-neutral-900'
+      {/* Clean Floating Bottom Multiline Input Bar for Active Chat */}
+      {messages.length > 0 && (
+        <div className="px-4 pb-3 pt-1 bg-white">
+          <div className="max-w-3xl mx-auto">
+            <div
+              className={`rounded-3xl border border-neutral-200 bg-[#f4f4f4] px-4 py-3 flex flex-col justify-between focus-within:bg-white focus-within:border-neutral-300 focus-within:shadow-xs transition-all ${
+                isExpanded ? 'min-h-[300px]' : 'min-h-[64px]'
+              }`}
+            >
+              {/* Textarea + Expand button in top row */}
+              <div className="flex items-start justify-between w-full gap-2">
+                <textarea
+                  ref={textareaRef}
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault()
+                      handleSend()
+                    }
+                  }}
+                  placeholder="Ask anything"
+                  rows={1}
+                  className={`w-full bg-transparent text-sm text-neutral-900 placeholder-neutral-400 focus:outline-none resize-none no-scrollbar leading-relaxed ${
+                    isExpanded ? 'h-[230px] overflow-y-auto' : 'max-h-[160px]'
                   }`}
-                  title="Deep Thinking Mode"
-                >
-                  <Brain className="h-3.5 w-3.5" />
-                  <span>Think</span>
-                </button>
+                />
 
                 <button
                   type="button"
-                  onClick={() => handleSend()}
-                  disabled={!input.trim() || loading}
-                  className={`h-8 w-8 rounded-full flex items-center justify-center transition-all cursor-pointer shadow-xs ${
-                    input.trim()
-                      ? 'bg-blue-600 hover:bg-blue-700 text-white'
-                      : 'bg-neutral-200 text-neutral-400 cursor-not-allowed'
-                  }`}
-                  title="Send message"
+                  onClick={() => setIsExpanded((prev) => !prev)}
+                  className="p-1 rounded-md text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200/60 transition-colors cursor-pointer shrink-0"
+                  title={isExpanded ? 'Collapse input' : 'Expand input fully'}
                 >
-                  <ArrowUp className="h-4 w-4" />
+                  {isExpanded ? (
+                    <Minimize2 className="h-3.5 w-3.5" />
+                  ) : (
+                    <Maximize2 className="h-3.5 w-3.5" />
+                  )}
                 </button>
               </div>
+
+              {/* Bottom Toolbar: Attach on left, Think + Mic + Send on right */}
+              <div className="flex items-center justify-between pt-2">
+                <button
+                  type="button"
+                  className="p-1.5 rounded-full text-neutral-500 hover:text-neutral-900 hover:bg-neutral-200/70 transition-colors cursor-pointer shrink-0"
+                  title="Attach files or context"
+                >
+                  <Plus className="h-4 w-4" />
+                </button>
+
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setThinkMode((prev) => !prev)}
+                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium transition-colors cursor-pointer ${
+                      thinkMode
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-neutral-500 hover:bg-neutral-200/70 hover:text-neutral-800'
+                    }`}
+                  >
+                    <Brain className="h-3.5 w-3.5" />
+                    <span>Think</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    className="p-1.5 rounded-full text-neutral-400 hover:text-neutral-700 hover:bg-neutral-200/50 transition-colors cursor-pointer"
+                    title="Voice input"
+                  >
+                    <Mic className="h-4 w-4" />
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => handleSend()}
+                    disabled={!input.trim() || loading}
+                    className={`h-8 w-8 rounded-full flex items-center justify-center transition-all cursor-pointer ${
+                      input.trim()
+                        ? 'bg-blue-600 hover:bg-blue-700 text-white shadow-xs'
+                        : 'bg-neutral-300/80 text-white cursor-not-allowed'
+                    }`}
+                    title="Send message"
+                  >
+                    <ArrowUp className="h-4 w-4" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Disclaimer Text */}
+            <div className="text-center text-[11px] text-neutral-400 mt-2 select-none">
+              Neurons can make mistakes. Check important info.
             </div>
           </div>
         </div>

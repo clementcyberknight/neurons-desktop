@@ -81,64 +81,90 @@ export const ExpenseModule: React.FC<Props> = ({ searchQuery = '' }) => {
 
   const activeSearch = searchQuery || localSearch
 
-  // Live query for all expenses
-  const allExpenses =
-    useLiveQuery(async () => {
-      let records = await db.finance.reverse().toArray()
-      return records.filter((r) => r.type === 'expense')
-    }) || []
-
-  // Filtered expense list
-  const filteredExpenses = useMemo(() => {
-    let list = [...allExpenses]
-
-    if (selectedCategory !== 'all') {
-      list = list.filter((r) => r.category === selectedCategory)
-    }
-
-    if (statusFilter !== 'all') {
-      list = list.filter((r) => (r.paymentStatus || 'Paid') === statusFilter)
-    }
-
-    if (methodFilter !== 'all') {
-      list = list.filter((r) => (r.paymentType || 'Cash') === methodFilter)
-    }
-
-    if (activeSearch.trim()) {
-      const q = activeSearch.toLowerCase()
-      list = list.filter(
-        (r) =>
-          r.description.toLowerCase().includes(q) ||
-          r.category.toLowerCase().includes(q) ||
-          (r.beneficiary && r.beneficiary.toLowerCase().includes(q)) ||
-          (r.referenceId && r.referenceId.toLowerCase().includes(q)) ||
-          (r.id && r.id.toLowerCase().includes(q))
-      )
-    }
-
-    return list
-  }, [allExpenses, selectedCategory, statusFilter, methodFilter, activeSearch])
-
   // Reset pagination on filter change
   useEffect(() => {
     setCurrentPage(1)
   }, [selectedCategory, statusFilter, methodFilter, activeSearch, pageSize])
 
-  const totalCount = filteredExpenses.length
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
-  const paginatedExpenses = useMemo(() => {
-    const start = (currentPage - 1) * pageSize
-    return filteredExpenses.slice(start, start + pageSize)
-  }, [filteredExpenses, currentPage, pageSize])
+  // Scalable 100k+ Live Query: streaming KPI aggregations + indexed DB pagination
+  const {
+    paginatedExpenses,
+    totalCount,
+    totalExpense,
+    totalExpenseCount,
+    topCategory,
+    avgVoucherSize,
+  } = useLiveQuery(async () => {
+    // 1. Streaming KPI aggregation (Single pass cursor iteration)
+    let totalSpend = 0
+    let countAll = 0
+    const categoryTotals: Record<string, number> = {}
 
-  // KPIs
-  const totalExpense = allExpenses.reduce((acc, curr) => acc + curr.amount, 0)
-  const categoryTotals: Record<string, number> = {}
-  allExpenses.forEach((rec) => {
-    categoryTotals[rec.category] = (categoryTotals[rec.category] || 0) + rec.amount
-  })
-  const topCategory = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0] || ['None', 0]
-  const avgVoucher = allExpenses.length > 0 ? Math.round(totalExpense / allExpenses.length) : 0
+    await db.finance.where('type').equals('expense').each((rec) => {
+      countAll++
+      totalSpend += rec.amount
+      categoryTotals[rec.category] = (categoryTotals[rec.category] || 0) + rec.amount
+    })
+
+    const topCat = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1])[0] || ['None', 0]
+    const avg = countAll > 0 ? Math.round(totalSpend / countAll) : 0
+
+    // 2. Query with indexed filtering & database-level offset/limit
+    const q = activeSearch.trim().toLowerCase()
+    let filteredCount = 0
+    let matchingExpenses: FinanceRecord[] = []
+
+    if (selectedCategory === 'all' && statusFilter === 'all' && methodFilter === 'all' && !q) {
+      const collection = db.finance.where('type').equals('expense').reverse()
+      filteredCount = await collection.count()
+      matchingExpenses = await collection.offset((currentPage - 1) * pageSize).limit(pageSize).toArray()
+    } else {
+      const matches: FinanceRecord[] = []
+      const collection = db.finance.where('type').equals('expense').reverse()
+
+      await collection.each((rec) => {
+        if (selectedCategory !== 'all' && rec.category !== selectedCategory) {
+          return
+        }
+        if (statusFilter !== 'all' && (rec.paymentStatus || 'Paid') !== statusFilter) {
+          return
+        }
+        if (methodFilter !== 'all' && (rec.paymentType || 'Cash') !== methodFilter) {
+          return
+        }
+        if (q) {
+          const matchesSearch =
+            rec.description.toLowerCase().includes(q) ||
+            rec.category.toLowerCase().includes(q) ||
+            Boolean(rec.beneficiary && rec.beneficiary.toLowerCase().includes(q)) ||
+            Boolean(rec.referenceId && rec.referenceId.toLowerCase().includes(q)) ||
+            rec.id.toLowerCase().includes(q)
+          if (!matchesSearch) return
+        }
+        matches.push(rec)
+      })
+
+      filteredCount = matches.length
+      const start = (currentPage - 1) * pageSize
+      matchingExpenses = matches.slice(start, start + pageSize)
+    }
+
+    return {
+      paginatedExpenses: matchingExpenses,
+      totalCount: filteredCount,
+      totalExpense: totalSpend,
+      totalExpenseCount: countAll,
+      topCategory: topCat,
+      avgVoucherSize: avg,
+    }
+  }, [selectedCategory, statusFilter, methodFilter, activeSearch, currentPage, pageSize]) || {
+    paginatedExpenses: [],
+    totalCount: 0,
+    totalExpense: 0,
+    totalExpenseCount: 0,
+    topCategory: ['None', 0],
+    avgVoucherSize: 0,
+  }
 
   // Open Create Modal
   const handleOpenCreate = () => {
@@ -164,8 +190,8 @@ export const ExpenseModule: React.FC<Props> = ({ searchQuery = '' }) => {
       expenseType: rec.category || 'Administrative',
       date: rec.transactionDate,
       amount: rec.amount,
-      paymentType: (rec.paymentType as any) || 'Cash',
-      paymentStatus: (rec.paymentStatus as any) || 'Paid',
+      paymentType: (rec.paymentType && PAYMENT_TYPES.includes(rec.paymentType as typeof PAYMENT_TYPES[number])) ? (rec.paymentType as typeof PAYMENT_TYPES[number]) : 'Cash',
+      paymentStatus: (rec.paymentStatus && PAYMENT_STATUSES.includes(rec.paymentStatus as typeof PAYMENT_STATUSES[number])) ? (rec.paymentStatus as typeof PAYMENT_STATUSES[number]) : 'Paid',
     })
     setShowAddModal(true)
   }
@@ -374,7 +400,7 @@ export const ExpenseModule: React.FC<Props> = ({ searchQuery = '' }) => {
               ₦{totalExpense.toLocaleString()}
             </div>
             <span className="text-[11px] text-neutral-400 mt-1 block font-mono">
-              {allExpenses.length} total vouchers logged
+              {totalExpenseCount} total vouchers logged
             </span>
           </div>
 
@@ -397,7 +423,7 @@ export const ExpenseModule: React.FC<Props> = ({ searchQuery = '' }) => {
               <Receipt className="h-4 w-4 text-neutral-500" />
             </div>
             <div className="mt-2 text-2xl font-extrabold font-mono text-neutral-900">
-              ₦{avgVoucher.toLocaleString()}
+              ₦{avgVoucherSize.toLocaleString()}
             </div>
             <span className="text-[11px] text-neutral-400 mt-1 block font-mono">Per recorded disbursement</span>
           </div>
@@ -595,7 +621,7 @@ export const ExpenseModule: React.FC<Props> = ({ searchQuery = '' }) => {
                   </label>
                   <select
                     value={formData.paymentType}
-                    onChange={(e) => setFormData({ ...formData, paymentType: e.target.value as any })}
+                    onChange={(e) => setFormData({ ...formData, paymentType: e.target.value as typeof PAYMENT_TYPES[number] })}
                     className="w-full rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5 text-xs font-semibold focus:bg-white focus:outline-none"
                   >
                     {PAYMENT_TYPES.map((pt) => (
@@ -612,7 +638,7 @@ export const ExpenseModule: React.FC<Props> = ({ searchQuery = '' }) => {
                   </label>
                   <select
                     value={formData.paymentStatus}
-                    onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value as any })}
+                    onChange={(e) => setFormData({ ...formData, paymentStatus: e.target.value as typeof PAYMENT_STATUSES[number] })}
                     className="w-full rounded-xl bg-neutral-50 border border-neutral-200 px-3 py-2.5 text-xs font-semibold focus:bg-white focus:outline-none"
                   >
                     {PAYMENT_STATUSES.map((ps) => (

@@ -69,11 +69,6 @@ export const CashbookModule: React.FC<Props> = ({ searchQuery: externalSearchQue
     paymentType: 'Cash' as 'Cash' | 'Bank Transfer' | 'Card',
   })
 
-  const activeSearch = externalSearchQuery || localSearch
-
-  // Live Query from Dexie Finance table
-  const allRecords = useLiveQuery(() => db.finance.reverse().toArray()) || []
-
   // Seed sample cashbook records if empty so the UI looks lively and populated like the user's screenshot
   useEffect(() => {
     const seed = async () => {
@@ -136,56 +131,84 @@ export const CashbookModule: React.FC<Props> = ({ searchQuery: externalSearchQue
     seed()
   }, [])
 
-  // Filtered list
-  const filteredRecords = useMemo(() => {
-    let list = [...allRecords]
-
-    if (activeTab === 'debit') {
-      list = list.filter((r) => r.type === 'income')
-    } else if (activeTab === 'credit') {
-      list = list.filter((r) => r.type === 'expense')
-    }
-
-    if (dateFilter.trim()) {
-      list = list.filter((r) => r.transactionDate === dateFilter)
-    }
-
-    if (activeSearch.trim()) {
-      const q = activeSearch.toLowerCase()
-      list = list.filter(
-        (r) =>
-          r.description.toLowerCase().includes(q) ||
-          r.category.toLowerCase().includes(q) ||
-          (r.referenceId && r.referenceId.toLowerCase().includes(q)) ||
-          r.transactionDate.includes(q)
-      )
-    }
-
-    return list
-  }, [allRecords, activeTab, dateFilter, activeSearch])
+  const activeSearch = externalSearchQuery || localSearch
 
   // Reset pagination on filter changes
   useEffect(() => {
     setCurrentPage(1)
   }, [activeTab, dateFilter, activeSearch, pageSize])
 
-  const totalCount = filteredRecords.length
-  const totalPages = Math.max(1, Math.ceil(totalCount / pageSize))
-  const paginatedRecords = useMemo(() => {
-    const start = (currentPage - 1) * pageSize
-    return filteredRecords.slice(start, start + pageSize)
-  }, [filteredRecords, currentPage, pageSize])
+  // Scalable 100k+ Live Query: streaming KPI aggregation + indexed DB pagination
+  const {
+    paginatedRecords,
+    totalCount,
+    totalReceipts,
+    totalPayments,
+    netChange,
+  } = useLiveQuery(async () => {
+    // 1. Streaming KPI aggregation (Single pass cursor iteration)
+    let receipts = 0
+    let payments = 0
 
-  // Summary KPIs (Debit = Receipts, Credit = Payments, Net Change)
-  const totalReceipts = allRecords
-    .filter((r) => r.type === 'income')
-    .reduce((acc, curr) => acc + curr.amount, 0)
+    await db.finance.each((r) => {
+      if (r.type === 'income') receipts += r.amount
+      else if (r.type === 'expense') payments += r.amount
+    })
 
-  const totalPayments = allRecords
-    .filter((r) => r.type === 'expense')
-    .reduce((acc, curr) => acc + curr.amount, 0)
+    const net = receipts - payments
 
-  const netChange = totalReceipts - totalPayments
+    // 2. Query with indexed filtering & database-level offset/limit
+    const q = activeSearch.trim().toLowerCase()
+    let filteredCount = 0
+    let matchingRecords: FinanceRecord[] = []
+
+    if (activeTab === 'all' && !dateFilter && !q) {
+      const collection = db.finance.orderBy('transactionDate').reverse()
+      filteredCount = await collection.count()
+      matchingRecords = await collection.offset((currentPage - 1) * pageSize).limit(pageSize).toArray()
+    } else if (activeTab !== 'all' && !dateFilter && !q) {
+      const targetType = activeTab === 'debit' ? 'income' : 'expense'
+      const collection = db.finance.where('type').equals(targetType).reverse()
+      filteredCount = await collection.count()
+      matchingRecords = await collection.offset((currentPage - 1) * pageSize).limit(pageSize).toArray()
+    } else {
+      const matches: FinanceRecord[] = []
+      let collection = activeTab !== 'all'
+        ? db.finance.where('type').equals(activeTab === 'debit' ? 'income' : 'expense').reverse()
+        : db.finance.orderBy('transactionDate').reverse()
+
+      await collection.each((r) => {
+        if (dateFilter && r.transactionDate !== dateFilter) return
+        if (q) {
+          const matchesSearch =
+            r.description.toLowerCase().includes(q) ||
+            r.category.toLowerCase().includes(q) ||
+            Boolean(r.referenceId && r.referenceId.toLowerCase().includes(q)) ||
+            r.transactionDate.includes(q)
+          if (!matchesSearch) return
+        }
+        matches.push(r)
+      })
+
+      filteredCount = matches.length
+      const start = (currentPage - 1) * pageSize
+      matchingRecords = matches.slice(start, start + pageSize)
+    }
+
+    return {
+      paginatedRecords: matchingRecords,
+      totalCount: filteredCount,
+      totalReceipts: receipts,
+      totalPayments: payments,
+      netChange: net,
+    }
+  }, [activeTab, dateFilter, activeSearch, currentPage, pageSize]) || {
+    paginatedRecords: [],
+    totalCount: 0,
+    totalReceipts: 0,
+    totalPayments: 0,
+    netChange: 0,
+  }
 
   // Open Create Modal
   const handleOpenCreate = () => {
@@ -212,7 +235,7 @@ export const CashbookModule: React.FC<Props> = ({ searchQuery: externalSearchQue
       date: rec.transactionDate,
       amount: rec.amount,
       referenceId: rec.referenceId || '',
-      paymentType: (rec.paymentType as any) || 'Cash',
+      paymentType: rec.paymentType === 'Bank Transfer' || rec.paymentType === 'Card' ? rec.paymentType : 'Cash',
     })
     setShowAddModal(true)
   }
@@ -276,14 +299,15 @@ export const CashbookModule: React.FC<Props> = ({ searchQuery: externalSearchQue
   }
 
   // Export Ledger to CSV
-  const handleExportCSV = () => {
-    if (allRecords.length === 0) {
+  const handleExportCSV = async () => {
+    const records = await db.finance.toArray()
+    if (records.length === 0) {
       showToast('No ledger records to export.')
       return
     }
 
     const headers = ['Date', 'Type', 'Description', 'Tag/Category', 'Amount (NGN)', 'Reference', 'Payment Method']
-    const rows = allRecords.map((r) => [
+    const rows = records.map((r) => [
       `"${r.transactionDate}"`,
       `"${r.type === 'income' ? 'Debit (Receipt)' : 'Credit (Payment)'}"`,
       `"${r.description.replace(/"/g, '""')}"`,
