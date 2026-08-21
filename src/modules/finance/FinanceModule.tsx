@@ -554,11 +554,13 @@ export const FinanceModule: React.FC<Props> = () => {
       </div>
 
       {/* 3. Sub-Module Navigation Tabs */}
-      <div className="flex items-center gap-2 border-b border-neutral-200 pb-2 overflow-x-auto no-scrollbar">
+      <div className="flex items-center gap-1.5 p-1.5 bg-neutral-100 rounded-2xl border border-neutral-200/70 w-fit max-w-full overflow-x-auto no-scrollbar text-xs font-semibold">
         <button
           onClick={() => setActiveTab('pnl')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === 'pnl' ? 'bg-neutral-900 text-white shadow-xs' : 'bg-white text-neutral-600 border border-neutral-200 hover:text-black'
+            activeTab === 'pnl'
+              ? 'bg-black text-white shadow-xs'
+              : 'text-neutral-600 hover:text-black hover:bg-neutral-200/60'
           }`}
         >
           <TrendingUp className="h-4 w-4" />
@@ -568,7 +570,9 @@ export const FinanceModule: React.FC<Props> = () => {
         <button
           onClick={() => setActiveTab('debts')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === 'debts' ? 'bg-neutral-900 text-white shadow-xs' : 'bg-white text-neutral-600 border border-neutral-200 hover:text-black'
+            activeTab === 'debts'
+              ? 'bg-black text-white shadow-xs'
+              : 'text-neutral-600 hover:text-black hover:bg-neutral-200/60'
           }`}
         >
           <Users className="h-4 w-4" />
@@ -578,7 +582,9 @@ export const FinanceModule: React.FC<Props> = () => {
         <button
           onClick={() => setActiveTab('payables')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === 'payables' ? 'bg-neutral-900 text-white shadow-xs' : 'bg-white text-neutral-600 border border-neutral-200 hover:text-black'
+            activeTab === 'payables'
+              ? 'bg-black text-white shadow-xs'
+              : 'text-neutral-600 hover:text-black hover:bg-neutral-200/60'
           }`}
         >
           <Building2 className="h-4 w-4" />
@@ -588,7 +594,9 @@ export const FinanceModule: React.FC<Props> = () => {
         <button
           onClick={() => setActiveTab('accounts')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === 'accounts' ? 'bg-neutral-900 text-white shadow-xs' : 'bg-white text-neutral-600 border border-neutral-200 hover:text-black'
+            activeTab === 'accounts'
+              ? 'bg-black text-white shadow-xs'
+              : 'text-neutral-600 hover:text-black hover:bg-neutral-200/60'
           }`}
         >
           <Landmark className="h-4 w-4" />
@@ -598,7 +606,9 @@ export const FinanceModule: React.FC<Props> = () => {
         <button
           onClick={() => setActiveTab('invoices')}
           className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer shrink-0 ${
-            activeTab === 'invoices' ? 'bg-neutral-900 text-white shadow-xs' : 'bg-white text-neutral-600 border border-neutral-200 hover:text-black'
+            activeTab === 'invoices'
+              ? 'bg-black text-white shadow-xs'
+              : 'text-neutral-600 hover:text-black hover:bg-neutral-200/60'
           }`}
         >
           <FileText className="h-4 w-4" />

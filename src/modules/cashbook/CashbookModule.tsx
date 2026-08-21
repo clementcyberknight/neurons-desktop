@@ -508,13 +508,13 @@ export const CashbookModule: React.FC<Props> = ({ searchQuery: externalSearchQue
       {/* 3. Filter Bar & Search (Matches Screenshot) */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
         {/* Left Side: Ledger Filter Pills */}
-        <div className="flex items-center gap-1.5 rounded-2xl bg-neutral-100/90 p-1 text-xs font-semibold">
+        <div className="flex items-center gap-1.5 rounded-2xl bg-neutral-100 p-1.5 border border-neutral-200/70 text-xs font-semibold">
           <button
             onClick={() => setActiveTab('all')}
             className={`rounded-xl px-4 py-2 transition-all cursor-pointer ${
               activeTab === 'all'
-                ? 'bg-white text-[#f97316] font-bold shadow-2xs'
-                : 'text-neutral-600 hover:text-neutral-900'
+                ? 'bg-black text-white font-bold shadow-xs'
+                : 'text-neutral-600 hover:text-black hover:bg-neutral-200/60'
             }`}
           >
             Full Ledger
@@ -524,8 +524,8 @@ export const CashbookModule: React.FC<Props> = ({ searchQuery: externalSearchQue
             onClick={() => setActiveTab('debit')}
             className={`flex items-center gap-1 rounded-xl px-4 py-2 transition-all cursor-pointer ${
               activeTab === 'debit'
-                ? 'bg-white text-[#2563eb] font-bold shadow-2xs'
-                : 'text-neutral-600 hover:text-neutral-900'
+                ? 'bg-black text-white font-bold shadow-xs'
+                : 'text-neutral-600 hover:text-black hover:bg-neutral-200/60'
             }`}
           >
             <span>↓</span>
@@ -536,8 +536,8 @@ export const CashbookModule: React.FC<Props> = ({ searchQuery: externalSearchQue
             onClick={() => setActiveTab('credit')}
             className={`flex items-center gap-1 rounded-xl px-4 py-2 transition-all cursor-pointer ${
               activeTab === 'credit'
-                ? 'bg-white text-[#ef4444] font-bold shadow-2xs'
-                : 'text-neutral-600 hover:text-neutral-900'
+                ? 'bg-black text-white font-bold shadow-xs'
+                : 'text-neutral-600 hover:text-black hover:bg-neutral-200/60'
             }`}
           >
             <span>↑</span>

@@ -3,26 +3,14 @@ import {
   Plus,
   ArrowUp,
   Brain,
-  Zap,
-  BarChart3,
-  ShieldAlert,
-  Calendar,
   Search,
   Copy,
   Check,
-  Share2,
-  RotateCcw,
-  MoreHorizontal,
-  Pencil,
-  ArrowDown,
-  RefreshCw,
   MessageSquare,
   ChevronDown,
-  ArrowLeft,
   Trash2,
   CheckSquare,
   Square,
-  Clock,
   Maximize2,
   Minimize2,
   Mic,
@@ -33,7 +21,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { SchemaRenderer } from '@/components/ai/SchemaRenderer'
 import type { LLMOutputSchema } from '@/types/schemas'
 import { db } from '@/db/localDb'
-import type { ChatMessage, ChatSession } from '@/types/database'
+import type { ChatMessage } from '@/types/database'
 
 interface Props {
   activeChatId?: string | null
