@@ -1,7 +1,9 @@
-import React, { useState, useRef, useEffect } from 'react'
+import React, { useState, useRef, useEffect, useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/db/localDb'
 import type { InventoryItem } from '@/types/database'
+import { DataTable, type DataTableColumn, type DataTableAction } from '@/components/ui/DataTable'
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import {
   Plus,
   AlertCircle,
@@ -12,11 +14,8 @@ import {
   Trash2,
   Store,
   Search,
-  MoreVertical,
   Pencil,
   PackagePlus,
-  ChevronLeft,
-  ChevronRight,
   AlertTriangle,
 } from 'lucide-react'
 
@@ -79,27 +78,14 @@ export const InventoryModule: React.FC<Props> = ({ searchQuery: externalSearchQu
   const [currentPage, setCurrentPage] = useState(1)
   const [pageSize, setPageSize] = useState(10)
 
-  // Modals & Menu State
+  // Modals & State
   const [showAddModal, setShowAddModal] = useState(false)
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null)
   const [restockingItem, setRestockingItem] = useState<InventoryItem | null>(null)
   const [restockQty, setRestockQty] = useState<number>(50)
   const [deletingItem, setDeletingItem] = useState<InventoryItem | null>(null)
 
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const menuContainerRef = useRef<HTMLDivElement>(null)
-
-  // Close three-dot menu when clicking outside
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (menuContainerRef.current && !menuContainerRef.current.contains(e.target as Node)) {
-        setActiveMenuId(null)
-      }
-    }
-    document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
-  }, [])
 
   useEffect(() => {
     setCurrentPage(1)
@@ -205,7 +191,6 @@ export const InventoryModule: React.FC<Props> = ({ searchQuery: externalSearchQu
 
   // Open Edit Modal with populated product data
   const handleOpenEdit = (item: InventoryItem) => {
-    setActiveMenuId(null)
     setEditingItemId(item.id)
     setFormData({
       name: item.name,
@@ -332,8 +317,153 @@ export const InventoryModule: React.FC<Props> = ({ searchQuery: externalSearchQu
     setDeletingItem(null)
   }
 
-  const startRecordIndex = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1
-  const endRecordIndex = Math.min(currentPage * pageSize, totalCount)
+  // ─── DataTable Column Definitions ────────────────────────────────
+  const inventoryColumns: DataTableColumn<InventoryItem>[] = useMemo(() => [
+    {
+      key: 'product',
+      header: 'Product',
+      render: (item) => (
+        <div className="flex items-center gap-3">
+          {item.image ? (
+            <img
+              src={item.image}
+              alt={item.name}
+              className="h-10 w-10 rounded-lg object-cover border border-neutral-200 shrink-0"
+            />
+          ) : (
+            <div className="h-10 w-10 rounded-lg bg-neutral-100 border border-neutral-200 flex items-center justify-center text-neutral-400 shrink-0">
+              <Package className="h-5 w-5" />
+            </div>
+          )}
+          <div>
+            <div className="font-semibold text-neutral-900 leading-tight">{item.name}</div>
+            <div className="font-mono text-[10px] text-neutral-400 mt-0.5">{item.sku}</div>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'brandSupplier',
+      header: 'Brand / Supplier',
+      render: (item) => (
+        <div>
+          <div className="text-neutral-800 font-medium">{item.brand || '—'}</div>
+          <div className="text-[11px] text-neutral-500 truncate max-w-[140px]">{item.supplier || 'Unassigned'}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'categoryType',
+      header: 'Category & Type',
+      render: (item) => (
+        <div>
+          <div className="text-neutral-800">{item.category}</div>
+          <span
+            className={`inline-block mt-0.5 rounded px-1.5 py-0.2 text-[10px] font-semibold uppercase font-mono border ${
+              item.type === 'Raw Material'
+                ? 'bg-amber-50 text-amber-800 border-amber-200'
+                : 'bg-blue-50 text-blue-800 border-blue-200'
+            }`}
+          >
+            {item.type || 'Finished Good'}
+          </span>
+        </div>
+      ),
+    },
+    {
+      key: 'stockUnits',
+      header: 'Stock Units',
+      render: (item) => {
+        const isLow = item.quantity <= item.minThreshold
+        const isOut = item.quantity === 0
+        return (
+          <div>
+            <div className="flex items-center gap-1.5">
+              <span className={`font-mono font-bold ${isOut ? 'text-red-700' : isLow ? 'text-red-600' : 'text-neutral-900'}`}>
+                {item.quantity.toLocaleString()}
+              </span>
+              <span className="text-[11px] text-neutral-500 font-medium">{item.unit}</span>
+            </div>
+            {isOut ? (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-700">
+                <AlertCircle className="h-3 w-3" /> Out of Stock
+              </span>
+            ) : isLow ? (
+              <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600">
+                <AlertCircle className="h-3 w-3" /> Low Stock
+              </span>
+            ) : null}
+          </div>
+        )
+      },
+    },
+    {
+      key: 'costPrice',
+      header: 'Cost Price (₦)',
+      render: (item) => (
+        <span className="font-mono text-neutral-600">
+          ₦{Number(item.costPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+        </span>
+      ),
+    },
+    {
+      key: 'sellingPrice',
+      header: 'Selling Price (₦)',
+      render: (item) => (
+        <span className="font-mono font-bold text-neutral-900">
+          ₦{Number(item.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+        </span>
+      ),
+    },
+    {
+      key: 'salesChannel',
+      header: 'Sales Channel',
+      render: (item) => (
+        <span className="text-[11px] text-neutral-600">
+          {item.salesChannel ? (
+            <span className="flex items-center gap-1">
+              <Store className="h-3 w-3 text-neutral-400 shrink-0" />
+              <span className="truncate max-w-[130px]">{item.salesChannel}</span>
+            </span>
+          ) : (
+            <span className="text-neutral-400">N/A</span>
+          )}
+        </span>
+      ),
+    },
+    {
+      key: 'expiryDate',
+      header: 'Expiry Date',
+      render: (item) => (
+        <span className="font-mono text-[11px] text-neutral-500">
+          {item.expiryDate || '—'}
+        </span>
+      ),
+    },
+  ], [])
+
+  const inventoryActions: DataTableAction<InventoryItem>[] = useMemo(() => [
+    {
+      label: 'Edit Product',
+      icon: <Pencil className="h-3.5 w-3.5" />,
+      onClick: (item) => handleOpenEdit(item),
+    },
+    {
+      label: 'Restock',
+      icon: <PackagePlus className="h-3.5 w-3.5" />,
+      onClick: (item) => {
+        setRestockingItem(item)
+        setRestockQty(50)
+      },
+    },
+    {
+      label: 'Delete',
+      icon: <Trash2 className="h-3.5 w-3.5" />,
+      onClick: (item) => setDeletingItem(item),
+      variant: 'danger' as const,
+      separator: true,
+    },
+  ], [])
 
   return (
     <div className="p-6 h-full flex flex-col justify-between overflow-y-auto space-y-4 bg-[#fafafa] font-sans select-none no-scrollbar">
@@ -459,255 +589,27 @@ export const InventoryModule: React.FC<Props> = ({ searchQuery: externalSearchQu
       </div>
 
       {/* 3. Inventory Stock Table */}
-      <div className="flex-1 min-h-[380px] rounded-xl border border-neutral-200 bg-white p-4 flex flex-col justify-between shadow-2xs" ref={menuContainerRef}>
-        <div className="overflow-x-auto min-h-[260px] pb-16">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-neutral-200 text-neutral-500 font-mono">
-                <th className="pb-3 font-semibold">Product</th>
-                <th className="pb-3 font-semibold">Brand / Supplier</th>
-                <th className="pb-3 font-semibold">Category & Type</th>
-                <th className="pb-3 font-semibold">Stock Units</th>
-                <th className="pb-3 font-semibold">Cost Price (₦)</th>
-                <th className="pb-3 font-semibold">Selling Price (₦)</th>
-                <th className="pb-3 font-semibold">Sales Channel</th>
-                <th className="pb-3 font-semibold">Expiry Date</th>
-                <th className="pb-3 font-semibold text-right pr-2">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
-              {inventory.map((item, idx) => {
-                const isLow = item.quantity <= item.minThreshold
-                const isOut = item.quantity === 0
-                const isMenuOpen = activeMenuId === item.id
-                const openUpward = idx > 0 && (inventory.length <= 4 || idx >= inventory.length - 2)
-
-                return (
-                  <tr key={item.id} className="hover:bg-neutral-50 transition-colors">
-                    {/* Product Name + Image */}
-                    <td className="py-3">
-                      <div className="flex items-center gap-3">
-                        {item.image ? (
-                          <img
-                            src={item.image}
-                            alt={item.name}
-                            className="h-10 w-10 rounded-lg object-cover border border-neutral-200 shrink-0"
-                          />
-                        ) : (
-                          <div className="h-10 w-10 rounded-lg bg-neutral-100 border border-neutral-200 flex items-center justify-center text-neutral-400 shrink-0">
-                            <Package className="h-5 w-5" />
-                          </div>
-                        )}
-                        <div>
-                          <div className="font-semibold text-neutral-900 leading-tight">{item.name}</div>
-                          <div className="font-mono text-[10px] text-neutral-400 mt-0.5">{item.sku}</div>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* Brand & Supplier */}
-                    <td className="py-3">
-                      <div className="text-neutral-800 font-medium">{item.brand || '—'}</div>
-                      <div className="text-[11px] text-neutral-500 truncate max-w-[140px]">{item.supplier || 'Unassigned'}</div>
-                    </td>
-
-                    {/* Category & Type Badge */}
-                    <td className="py-3">
-                      <div className="text-neutral-800">{item.category}</div>
-                      <span className={`inline-block mt-0.5 rounded px-1.5 py-0.2 text-[10px] font-semibold uppercase font-mono border ${
-                        item.type === 'Raw Material'
-                          ? 'bg-amber-50 text-amber-800 border-amber-200'
-                          : 'bg-blue-50 text-blue-800 border-blue-200'
-                      }`}>
-                        {item.type || 'Finished Good'}
-                      </span>
-                    </td>
-
-                    {/* Stock Quantity */}
-                    <td className="py-3">
-                      <div className="flex items-center gap-1.5">
-                        <span className={`font-mono font-bold ${isOut ? 'text-red-700' : isLow ? 'text-red-600' : 'text-neutral-900'}`}>
-                          {item.quantity.toLocaleString()}
-                        </span>
-                        <span className="text-[11px] text-neutral-500 font-medium">{item.unit}</span>
-                      </div>
-                      {isOut ? (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-700">
-                          <AlertCircle className="h-3 w-3" /> Out of Stock
-                        </span>
-                      ) : isLow ? (
-                        <span className="inline-flex items-center gap-0.5 text-[10px] font-semibold text-red-600">
-                          <AlertCircle className="h-3 w-3" /> Low Stock
-                        </span>
-                      ) : null}
-                    </td>
-
-                    {/* Cost Price */}
-                    <td className="py-3 font-mono text-neutral-600">
-                      ₦{Number(item.costPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </td>
-
-                    {/* Selling Price */}
-                    <td className="py-3 font-mono font-bold text-neutral-900">
-                      ₦{Number(item.unitPrice || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                    </td>
-
-                    {/* Sales Channel */}
-                    <td className="py-3 text-[11px] text-neutral-600">
-                      {item.salesChannel ? (
-                        <span className="flex items-center gap-1">
-                          <Store className="h-3 w-3 text-neutral-400 shrink-0" />
-                          <span className="truncate max-w-[130px]">{item.salesChannel}</span>
-                        </span>
-                      ) : (
-                        <span className="text-neutral-400">N/A</span>
-                      )}
-                    </td>
-
-                    {/* Expiry Date */}
-                    <td className="py-3 font-mono text-[11px] text-neutral-500">
-                      {item.expiryDate || '—'}
-                    </td>
-
-                    {/* Three-Dot Action Button & Dropdown */}
-                    <td className="py-3 text-right pr-2 relative">
-                      <div className="inline-block text-left">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            setActiveMenuId(isMenuOpen ? null : item.id)
-                          }}
-                          className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                            isMenuOpen
-                              ? 'bg-neutral-900 text-white border-neutral-900'
-                              : 'bg-white hover:bg-neutral-100 text-neutral-600 border-neutral-200 shadow-2xs'
-                          }`}
-                          title="More options"
-                        >
-                          <MoreVertical className="h-4 w-4" />
-                        </button>
-
-                        {/* Dropdown Menu */}
-                        {isMenuOpen && (
-                          <div className={`absolute right-2 ${openUpward ? 'bottom-full mb-1.5' : 'top-full mt-1.5'} w-40 rounded-xl bg-white border border-neutral-200 shadow-xl py-1.5 z-50 text-left animate-in fade-in zoom-in-95 duration-100`}>
-                            {/* 1. Edit */}
-                            <button
-                              onClick={() => handleOpenEdit(item)}
-                              className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-neutral-100 hover:text-black transition-colors cursor-pointer"
-                            >
-                              <Pencil className="h-3.5 w-3.5 text-neutral-500" />
-                              <span>Edit Product</span>
-                            </button>
-
-                            {/* 2. Restock */}
-                            <button
-                              onClick={() => {
-                                setActiveMenuId(null)
-                                setRestockingItem(item)
-                                setRestockQty(50)
-                              }}
-                              className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-neutral-700 hover:bg-neutral-100 hover:text-black transition-colors cursor-pointer"
-                            >
-                              <PackagePlus className="h-3.5 w-3.5 text-neutral-500" />
-                              <span>Restock</span>
-                            </button>
-
-                            <div className="my-1 border-t border-neutral-100" />
-
-                            {/* 3. Delete */}
-                            <button
-                              onClick={() => {
-                                setActiveMenuId(null)
-                                setDeletingItem(item)
-                              }}
-                              className="w-full flex items-center gap-2 px-3.5 py-2 text-xs text-red-600 hover:bg-red-50 hover:text-red-700 transition-colors cursor-pointer"
-                            >
-                              <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                              <span>Delete</span>
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-
-          {inventory.length === 0 && (
-            <div className="p-12 text-center text-neutral-400">
-              <Package className="h-8 w-8 mx-auto mb-2 opacity-40" />
-              <p className="text-sm font-semibold text-neutral-600">No inventory products found</p>
-              <p className="text-xs text-neutral-400 mt-1">
-                {localSearch || typeFilter !== 'ALL' || categoryFilter !== 'ALL' || statusFilter !== 'ALL'
-                  ? 'Try clearing your search or filter options.'
-                  : 'Click "Add Stock Item" above to add your first product.'}
-              </p>
-            </div>
-          )}
-        </div>
-
-        {/* 4. Pagination Controls */}
-        <div className="border-t border-neutral-200 pt-3 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-neutral-500 font-mono">
-          <div className="flex items-center gap-2">
-            <span>
-              Showing <strong className="text-neutral-900">{startRecordIndex}</strong> to{' '}
-              <strong className="text-neutral-900">{endRecordIndex}</strong> of{' '}
-              <strong className="text-neutral-900">{totalCount}</strong> products
-            </span>
-            <span>•</span>
-            <div className="flex items-center gap-1">
-              <label>Per page:</label>
-              <select
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-                className="bg-white border border-neutral-200 rounded px-1.5 py-0.5 text-neutral-700 focus:outline-none cursor-pointer"
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-            </div>
-          </div>
-
-          {totalPages > 1 && (
-            <div className="flex items-center gap-1.5">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage <= 1}
-                className="p-1.5 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                title="Previous page"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
-                <button
-                  key={pageNum}
-                  onClick={() => setCurrentPage(pageNum)}
-                  className={`h-7 w-7 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    currentPage === pageNum
-                      ? 'bg-neutral-900 text-white shadow-xs'
-                      : 'bg-white border border-neutral-200 text-neutral-700 hover:bg-neutral-50'
-                  }`}
-                >
-                  {pageNum}
-                </button>
-              ))}
-
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage >= totalPages}
-                className="p-1.5 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 text-neutral-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                title="Next page"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </button>
-            </div>
-          )}
-        </div>
-      </div>
+      <DataTable<InventoryItem>
+        columns={inventoryColumns}
+        data={inventory}
+        getItemId={(item) => item.id}
+        actions={inventoryActions}
+        emptyIcon={<Package className="h-8 w-8" />}
+        emptyTitle="No inventory products found"
+        emptyDescription={
+          localSearch || typeFilter !== 'ALL' || categoryFilter !== 'ALL' || statusFilter !== 'ALL'
+            ? 'Try clearing your search or filter options.'
+            : 'Click "Add Stock Item" above to add your first product.'
+        }
+        pagination={{
+          currentPage,
+          pageSize,
+          totalCount,
+          onPageChange: setCurrentPage,
+          onPageSizeChange: setPageSize,
+          label: 'products',
+        }}
+      />
 
       {/* 5. Add / Edit Product Modal */}
       {showAddModal && (
@@ -1098,40 +1000,20 @@ export const InventoryModule: React.FC<Props> = ({ searchQuery: externalSearchQu
       )}
 
       {/* 7. Delete Confirmation Dialog */}
-      {deletingItem && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl border border-neutral-200 text-neutral-900 animate-in fade-in zoom-in-95 duration-100">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-10 w-10 rounded-xl bg-red-50 border border-red-200 text-red-600 flex items-center justify-center shrink-0">
-                <AlertTriangle className="h-5 w-5" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-neutral-900">Delete Product Entry?</h3>
-                <p className="text-xs text-neutral-500">This action cannot be undone.</p>
-              </div>
-            </div>
-
-            <p className="text-xs text-neutral-600 leading-relaxed mb-5">
+      <ConfirmDeleteModal
+        open={!!deletingItem}
+        title="Delete Product Entry?"
+        description={
+          deletingItem ? (
+            <p>
               Are you sure you want to remove <strong className="text-neutral-900">"{deletingItem.name}"</strong> (SKU: {deletingItem.sku}) from warehouse inventory records?
             </p>
-
-            <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-neutral-200">
-              <button
-                onClick={() => setDeletingItem(null)}
-                className="rounded-xl px-4 py-2 text-xs font-semibold text-neutral-600 hover:bg-neutral-100 transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleExecuteDelete}
-                className="rounded-xl bg-red-600 hover:bg-red-700 px-5 py-2 text-xs font-bold text-white shadow-xs transition-all cursor-pointer"
-              >
-                Yes, Delete Product
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+          ) : null
+        }
+        confirmLabel="Yes, Delete Product"
+        onConfirm={handleExecuteDelete}
+        onCancel={() => setDeletingItem(null)}
+      />
     </div>
   )
 }

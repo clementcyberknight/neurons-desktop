@@ -2,6 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/db/localDb'
 import type { POSTransaction } from '@/types/database'
+import { DataTable, type DataTableColumn, type DataTableAction } from '@/components/ui/DataTable'
+import { Toast } from '@/components/ui/Toast'
+import { ConfirmDeleteModal } from '@/components/ui/ConfirmDeleteModal'
 import {
   Search,
   Filter,
@@ -13,13 +16,9 @@ import {
   CreditCard,
   Banknote,
   Layers,
-  MoreVertical,
   Pencil,
   Trash2,
-  AlertCircle,
   Printer,
-  ChevronLeft,
-  ChevronRight,
   RotateCcw,
   ArrowRightLeft,
   Store,
@@ -37,7 +36,6 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
   const [statusFilter, setStatusFilter] = useState<'all' | 'completed' | 'flagged' | 'refunded' | 'pending'>('all')
   const [methodFilter, setMethodFilter] = useState<string>('all')
   const [localSearch, setLocalSearch] = useState('')
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null)
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1)
@@ -65,13 +63,6 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
     discountPercent: 0,
     overrideReason: '',
   })
-
-  // Close three-dot menu when clicking outside
-  useEffect(() => {
-    const handleOutsideClick = () => setActiveMenuId(null)
-    window.addEventListener('click', handleOutsideClick)
-    return () => window.removeEventListener('click', handleOutsideClick)
-  }, [])
 
   const activeSearch = searchQuery || localSearch
 
@@ -128,7 +119,6 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
 
   // Open Edit Modal
   const handleOpenEdit = (txn: POSTransaction) => {
-    setActiveMenuId(null)
     setEditingTxn(txn)
     setEditFormData({
       receiptNumber: txn.receiptNumber,
@@ -181,15 +171,113 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
   const startRecordIndex = totalCount === 0 ? 0 : (currentPage - 1) * pageSize + 1
   const endRecordIndex = Math.min(currentPage * pageSize, totalCount)
 
+  // ─── DataTable Column Definitions ────────────────────────────────
+  const salesColumns: DataTableColumn<POSTransaction>[] = useMemo(() => [
+    {
+      key: 'receiptNumber',
+      header: 'Receipt No.',
+      render: (txn) => (
+        <span className="font-mono font-bold text-neutral-900">{txn.receiptNumber}</span>
+      ),
+    },
+    {
+      key: 'createdAt',
+      header: 'Date & Time',
+      render: (txn) => (
+        <span className="font-mono text-neutral-500 text-[11px]">
+          {new Date(txn.createdAt).toLocaleDateString()} {new Date(txn.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+        </span>
+      ),
+    },
+    {
+      key: 'cashier',
+      header: 'Cashier & Station',
+      render: (txn) => (
+        <div>
+          <div className="font-semibold text-neutral-900">{txn.cashierName}</div>
+          <div className="text-[10px] text-neutral-400 font-mono">{txn.posStation}</div>
+        </div>
+      ),
+    },
+    {
+      key: 'items',
+      header: 'Items',
+      render: (txn) => (
+        <span className="font-mono text-neutral-600">
+          {txn.items?.length || 0} item{(txn.items?.length || 0) !== 1 ? 's' : ''}
+        </span>
+      ),
+    },
+    {
+      key: 'paymentMethod',
+      header: 'Payment Method',
+      render: (txn) => (
+        <span className="inline-flex items-center gap-1 rounded-md bg-neutral-100 border border-neutral-200 px-2 py-0.5 text-[10px] font-mono text-neutral-800 uppercase font-semibold">
+          {txn.paymentMethod === 'card' && <CreditCard className="h-2.5 w-2.5" />}
+          {txn.paymentMethod === 'cash' && <Banknote className="h-2.5 w-2.5" />}
+          {txn.paymentMethod === 'split' && <Layers className="h-2.5 w-2.5 text-emerald-600" />}
+          {txn.paymentMethod === 'bank_transfer' ? 'Transfer' : txn.paymentMethod === 'store_credit' ? 'Credit' : txn.paymentMethod === 'split' ? 'Split' : txn.paymentMethod}
+        </span>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status / Override',
+      render: (txn) => {
+        const isFlagged = txn.status === 'flagged' || txn.hasManualOverride
+        return isFlagged ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+            <AlertTriangle className="h-2.5 w-2.5" />
+            {txn.discountPercent}% Override
+          </span>
+        ) : txn.status === 'refunded' ? (
+          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[10px] font-semibold text-red-700 font-mono uppercase">
+            Refunded
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 font-mono uppercase">
+            <CheckCircle className="h-2.5 w-2.5" />
+            Completed
+          </span>
+        )
+      },
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      align: 'right' as const,
+      render: (txn) => (
+        <span className="font-mono font-extrabold text-neutral-900">
+          ₦{txn.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+        </span>
+      ),
+    },
+  ], [])
+
+  const salesActions: DataTableAction<POSTransaction>[] = useMemo(() => [
+    {
+      label: 'View Receipt',
+      icon: <Eye className="h-3.5 w-3.5" />,
+      onClick: (txn) => setSelectedTxn(txn),
+    },
+    {
+      label: 'Edit Sale',
+      icon: <Pencil className="h-3.5 w-3.5" />,
+      onClick: (txn) => handleOpenEdit(txn),
+    },
+    {
+      label: 'Delete Record',
+      icon: <Trash2 className="h-3.5 w-3.5" />,
+      onClick: (txn) => setDeletingTxn(txn),
+      variant: 'danger' as const,
+      separator: true,
+    },
+  ], [])
+
   return (
     <div className="p-6 h-full flex flex-col justify-between overflow-y-auto space-y-6 bg-[#fafafa] font-sans select-none no-scrollbar relative">
       {/* In-App Toast Notification Banner */}
-      {toastMessage && (
-        <div className="absolute top-4 left-1/2 -translate-x-1/2 z-50 rounded-xl bg-neutral-900 text-white px-4 py-2.5 text-xs font-semibold shadow-2xl flex items-center gap-2 border border-neutral-700 animate-in fade-in slide-in-from-top-2">
-          <AlertCircle className="h-4 w-4 text-emerald-400 shrink-0" />
-          <span>{toastMessage}</span>
-        </div>
-      )}
+      <Toast message={toastMessage} onDismiss={() => setToastMessage(null)} />
 
       {/* 1. Top Banner & KPI Summary */}
       <div>
@@ -291,194 +379,22 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
       </div>
 
       {/* 3. Transactions Table */}
-      <div className="flex-1 min-h-[380px] rounded-2xl border border-neutral-200 bg-white p-4 flex flex-col justify-between shadow-2xs">
-        <div className="overflow-x-auto min-h-[260px] pb-16">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-neutral-200 text-neutral-500 font-mono">
-                <th className="pb-3 font-semibold">Receipt No.</th>
-                <th className="pb-3 font-semibold">Date & Time</th>
-                <th className="pb-3 font-semibold">Cashier & Station</th>
-                <th className="pb-3 font-semibold">Items</th>
-                <th className="pb-3 font-semibold">Payment Method</th>
-                <th className="pb-3 font-semibold">Status / Override</th>
-                <th className="pb-3 font-semibold text-right">Amount</th>
-                <th className="pb-3 font-semibold text-right pr-3">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-neutral-100">
-              {paginatedTransactions.length === 0 ? (
-                <tr>
-                  <td colSpan={8} className="py-12 text-center text-neutral-400">
-                    <Receipt className="h-8 w-8 mx-auto mb-2 opacity-30" />
-                    <p className="text-xs font-semibold text-neutral-600">No sales transactions found matching filters</p>
-                  </td>
-                </tr>
-              ) : (
-                paginatedTransactions.map((txn, idx) => {
-                  const isFlagged = txn.status === 'flagged' || txn.hasManualOverride
-                  const isMenuOpen = activeMenuId === txn.id
-                  const openUpward = idx > 0 && (paginatedTransactions.length <= 4 || idx >= paginatedTransactions.length - 2)
-
-                  return (
-                    <tr key={txn.id} className="hover:bg-neutral-50/80 transition-colors">
-                      <td className="py-3 font-mono font-bold text-neutral-900">{txn.receiptNumber}</td>
-                      <td className="py-3 font-mono text-neutral-500 text-[11px]">
-                        {new Date(txn.createdAt).toLocaleDateString()} {new Date(txn.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </td>
-                      <td className="py-3">
-                        <div className="font-semibold text-neutral-900">{txn.cashierName}</div>
-                        <div className="text-[10px] text-neutral-400 font-mono">{txn.posStation}</div>
-                      </td>
-                      <td className="py-3 font-mono text-neutral-600">
-                        {txn.items?.length || 0} item{(txn.items?.length || 0) !== 1 ? 's' : ''}
-                      </td>
-                      <td className="py-3">
-                        <span className="inline-flex items-center gap-1 rounded-md bg-neutral-100 border border-neutral-200 px-2 py-0.5 text-[10px] font-mono text-neutral-800 uppercase font-semibold">
-                          {txn.paymentMethod === 'card' && <CreditCard className="h-2.5 w-2.5" />}
-                          {txn.paymentMethod === 'cash' && <Banknote className="h-2.5 w-2.5" />}
-                          {txn.paymentMethod === 'split' && <Layers className="h-2.5 w-2.5 text-emerald-600" />}
-                          {txn.paymentMethod === 'bank_transfer' ? 'Transfer' : txn.paymentMethod === 'store_credit' ? 'Credit' : txn.paymentMethod === 'split' ? 'Split' : txn.paymentMethod}
-                        </span>
-                      </td>
-                      <td className="py-3">
-                        {isFlagged ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-amber-50 border border-amber-200 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
-                            <AlertTriangle className="h-2.5 w-2.5" />
-                            {txn.discountPercent}% Override
-                          </span>
-                        ) : txn.status === 'refunded' ? (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-red-50 border border-red-200 px-2 py-0.5 text-[10px] font-semibold text-red-700 font-mono uppercase">
-                            Refunded
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 border border-emerald-200 px-2 py-0.5 text-[10px] font-semibold text-emerald-700 font-mono uppercase">
-                            <CheckCircle className="h-2.5 w-2.5" />
-                            Completed
-                          </span>
-                        )}
-                      </td>
-                      <td className="py-3 font-mono font-extrabold text-right text-neutral-900">
-                        ₦{txn.totalAmount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
-                      </td>
-
-                      {/* 3-Dot Action Button & Menu */}
-                      <td className="py-3 text-right pr-2 relative">
-                        <div className="inline-block text-left">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              setActiveMenuId(isMenuOpen ? null : txn.id)
-                            }}
-                            className={`p-1.5 rounded-lg border transition-all cursor-pointer ${
-                              isMenuOpen
-                                ? 'bg-neutral-900 text-white border-neutral-900'
-                                : 'bg-white hover:bg-neutral-100 text-neutral-600 border-neutral-200 shadow-2xs'
-                            }`}
-                            title="Actions"
-                          >
-                            <MoreVertical className="h-4 w-4" />
-                          </button>
-
-                          {/* Dropdown Menu (View, Edit, Delete) */}
-                          {isMenuOpen && (
-                            <div className={`absolute right-2 ${openUpward ? 'bottom-full mb-1' : 'top-full mt-1'} w-44 rounded-xl bg-white border border-neutral-200 shadow-xl py-1.5 z-50 text-left animate-in fade-in zoom-in-95 duration-100`}>
-                              {/* 1. View Receipt */}
-                              <button
-                                onClick={() => {
-                                  setActiveMenuId(null)
-                                  setSelectedTxn(txn)
-                                }}
-                                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 hover:text-black transition-colors cursor-pointer"
-                              >
-                                <Eye className="h-3.5 w-3.5 text-neutral-500" />
-                                <span>View Receipt</span>
-                              </button>
-
-                              {/* 2. Edit Transaction */}
-                              <button
-                                onClick={() => handleOpenEdit(txn)}
-                                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-neutral-700 hover:bg-neutral-100 hover:text-black transition-colors cursor-pointer"
-                              >
-                                <Pencil className="h-3.5 w-3.5 text-neutral-500" />
-                                <span>Edit Sale</span>
-                              </button>
-
-                              <div className="my-1 border-t border-neutral-100" />
-
-                              {/* 3. Delete Record */}
-                              <button
-                                onClick={() => {
-                                  setActiveMenuId(null)
-                                  setDeletingTxn(txn)
-                                }}
-                                className="w-full flex items-center gap-2.5 px-3.5 py-2 text-xs font-semibold text-red-600 hover:bg-red-50 transition-colors cursor-pointer"
-                              >
-                                <Trash2 className="h-3.5 w-3.5 text-red-500" />
-                                <span>Delete Record</span>
-                              </button>
-                            </div>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  )
-                })
-              )}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Pagination Controls */}
-        <div className="pt-4 border-t border-neutral-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs">
-          <div className="text-neutral-500 font-medium">
-            Showing <span className="font-bold text-neutral-800">{startRecordIndex}</span> to{' '}
-            <span className="font-bold text-neutral-800">{endRecordIndex}</span> of{' '}
-            <span className="font-bold text-neutral-800">{totalCount}</span> sales records
-          </div>
-
-          <div className="flex items-center gap-3 self-end sm:self-auto">
-            {/* Page Size Select */}
-            <div className="flex items-center gap-1.5 text-neutral-500">
-              <span>Show:</span>
-              <select
-                value={pageSize}
-                onChange={(e) => setPageSize(Number(e.target.value))}
-                className="rounded-lg bg-neutral-50 border border-neutral-200 px-2 py-1 text-xs font-semibold text-neutral-700 focus:outline-none"
-              >
-                <option value={10}>10</option>
-                <option value={20}>20</option>
-                <option value={50}>50</option>
-              </select>
-            </div>
-
-            {/* Prev / Next Buttons */}
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-                disabled={currentPage <= 1}
-                className="p-1.5 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed text-neutral-700 cursor-pointer shadow-2xs"
-                title="Previous Page"
-              >
-                <ChevronLeft className="h-3.5 w-3.5" />
-              </button>
-
-              <span className="px-2 font-mono font-semibold text-neutral-800">
-                Page {currentPage} of {totalPages}
-              </span>
-
-              <button
-                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-                disabled={currentPage >= totalPages}
-                className="p-1.5 rounded-lg border border-neutral-200 bg-white hover:bg-neutral-50 disabled:opacity-30 disabled:cursor-not-allowed text-neutral-700 cursor-pointer shadow-2xs"
-                title="Next Page"
-              >
-                <ChevronRight className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
+      <DataTable<POSTransaction>
+        columns={salesColumns}
+        data={paginatedTransactions}
+        getItemId={(txn) => txn.id}
+        actions={salesActions}
+        emptyIcon={<Receipt className="h-8 w-8" />}
+        emptyTitle="No sales transactions found matching filters"
+        pagination={{
+          currentPage,
+          pageSize,
+          totalCount,
+          onPageChange: setCurrentPage,
+          onPageSizeChange: setPageSize,
+          label: 'sales records',
+        }}
+      />
 
       {/* 4. MODAL: Receipt Detail View */}
       {selectedTxn && (
@@ -719,40 +635,20 @@ export const SalesModule: React.FC<Props> = ({ searchQuery = '' }) => {
       )}
 
       {/* 6. MODAL: Delete Confirmation */}
-      {deletingTxn && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-xs p-4">
-          <div className="w-full max-w-sm rounded-2xl border border-neutral-200 bg-white p-6 shadow-2xl space-y-4 animate-in fade-in zoom-in-95">
-            <div className="h-11 w-11 rounded-2xl bg-red-50 text-red-600 flex items-center justify-center mx-auto border border-red-100">
-              <Trash2 className="h-5 w-5" />
-            </div>
-
-            <div className="text-center">
-              <h3 className="text-base font-bold text-neutral-900">Delete Sales Record?</h3>
-              <p className="text-xs text-neutral-500 mt-1">
-                Are you sure you want to remove <strong className="text-neutral-800">{deletingTxn.receiptNumber}</strong> (Total: <strong className="text-neutral-800 font-mono">₦{deletingTxn.totalAmount.toLocaleString()}</strong>) from the transaction ledger?
-              </p>
-              <span className="text-[11px] text-red-600 block mt-2 font-medium">This action cannot be undone.</span>
-            </div>
-
-            <div className="flex items-center gap-2 pt-2">
-              <button
-                type="button"
-                onClick={() => setDeletingTxn(null)}
-                className="flex-1 rounded-xl border border-neutral-200 bg-white hover:bg-neutral-100 py-2.5 text-xs font-semibold text-neutral-700 cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleExecuteDelete}
-                className="flex-1 rounded-xl bg-red-600 hover:bg-red-700 py-2.5 text-xs font-bold text-white shadow-xs cursor-pointer"
-              >
-                Delete Record
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      <ConfirmDeleteModal
+        open={!!deletingTxn}
+        title="Delete Sales Record?"
+        description={
+          deletingTxn ? (
+            <p>
+              Are you sure you want to remove <strong className="text-neutral-800">{deletingTxn.receiptNumber}</strong> (Total: <strong className="text-neutral-800 font-mono">₦{deletingTxn.totalAmount.toLocaleString()}</strong>) from the transaction ledger?
+            </p>
+          ) : null
+        }
+        confirmLabel="Delete Record"
+        onConfirm={handleExecuteDelete}
+        onCancel={() => setDeletingTxn(null)}
+      />
     </div>
   )
 }
