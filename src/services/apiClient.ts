@@ -26,6 +26,8 @@ export class ApiClientError extends Error {
 
 export class ApiClient {
   private baseUrl: string = 'http://localhost:4000'
+  private authToken: string | null = null
+  private refreshToken: string | null = null
 
   setBaseUrl(url: string): void {
     if (url && url.trim().length > 0) {
@@ -35,6 +37,22 @@ export class ApiClient {
 
   getBaseUrl(): string {
     return this.baseUrl
+  }
+
+  setAuthTokens(tokens: { accessToken: string; refreshToken?: string }): void {
+    this.authToken = tokens.accessToken
+    if (tokens.refreshToken) {
+      this.refreshToken = tokens.refreshToken
+    }
+  }
+
+  clearAuthTokens(): void {
+    this.authToken = null
+    this.refreshToken = null
+  }
+
+  getAccessToken(): string | null {
+    return this.authToken
   }
 
   private async request<T>(
@@ -49,6 +67,10 @@ export class ApiClient {
       headers.set('Content-Type', 'application/json')
     }
     headers.set('X-Request-Id', requestId)
+
+    if (this.authToken && !headers.has('Authorization')) {
+      headers.set('Authorization', `Bearer ${this.authToken}`)
+    }
 
     let res: Response
     try {
@@ -112,14 +134,43 @@ export class ApiClient {
   async verifyOtp(
     email: string,
     otp: string
-  ): Promise<{ success: boolean; isNewUser: boolean; user?: any; organization?: any }> {
-    const result = await this.request<{ success: boolean; isNewUser: boolean; user?: any; organization?: any }>(
-      '/api/auth/otp/verify',
-      {
-        method: 'POST',
-        body: JSON.stringify({ email, otp }),
-      }
-    )
+  ): Promise<{
+    success: boolean
+    isNewUser: boolean
+    accessToken?: string
+    refreshToken?: string
+    expiresIn?: number
+    user?: any
+    organization?: any
+  }> {
+    const result = await this.request<{
+      success: boolean
+      isNewUser: boolean
+      accessToken?: string
+      refreshToken?: string
+      expiresIn?: number
+      user?: any
+      organization?: any
+    }>('/api/auth/otp/verify', {
+      method: 'POST',
+      body: JSON.stringify({ email, otp }),
+    })
+    return result.data
+  }
+
+  async refreshAccessToken(refreshToken: string): Promise<{
+    accessToken: string
+    refreshToken: string
+    expiresIn: number
+  }> {
+    const result = await this.request<{
+      accessToken: string
+      refreshToken: string
+      expiresIn: number
+    }>('/api/auth/token/refresh', {
+      method: 'POST',
+      body: JSON.stringify({ refreshToken }),
+    })
     return result.data
   }
 
@@ -133,11 +184,31 @@ export class ApiClient {
     monthlyTransactionVolume: string
     monthlyRevenue: string
     aiModelMode: string
-  }): Promise<{ user: any; organization: any }> {
-    const result = await this.request<{ user: any; organization: any }>('/api/auth/onboarding', {
+  }): Promise<{
+    accessToken: string
+    refreshToken: string
+    expiresIn: number
+    user: any
+    organization: any
+  }> {
+    const result = await this.request<{
+      accessToken: string
+      refreshToken: string
+      expiresIn: number
+      user: any
+      organization: any
+    }>('/api/auth/onboarding', {
       method: 'POST',
       body: JSON.stringify(data),
     })
+    return result.data
+  }
+
+  async checkModelStatus(filename: string): Promise<{ exists: boolean; filename: string; path?: string }> {
+    const result = await this.request<{ exists: boolean; filename: string; path?: string }>(
+      `/api/ai/model/check?filename=${encodeURIComponent(filename)}`,
+      { method: 'GET' }
+    )
     return result.data
   }
 

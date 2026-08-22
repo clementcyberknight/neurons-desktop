@@ -67,6 +67,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           apiClient.setBaseUrl(settings.customBackendEndpoint)
         }
 
+        // Initialize JWT Auth Tokens if present
+        const savedAccessToken = localStorage.getItem('neurons_access_token')
+        const savedRefreshToken = localStorage.getItem('neurons_refresh_token')
+        if (savedAccessToken) {
+          apiClient.setAuthTokens({
+            accessToken: savedAccessToken,
+            refreshToken: savedRefreshToken || undefined,
+          })
+        }
+
         // Load active User Profile
         const activeUserId = localStorage.getItem('neurons_active_user_id')
         if (activeUserId) {
@@ -142,6 +152,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       try {
         const backendRes = await apiClient.verifyOtp(trimmedEmail, trimmedOtp)
         if (backendRes.success) {
+          if (backendRes.accessToken) {
+            localStorage.setItem('neurons_access_token', backendRes.accessToken)
+            if (backendRes.refreshToken) {
+              localStorage.setItem('neurons_refresh_token', backendRes.refreshToken)
+            }
+            apiClient.setAuthTokens({
+              accessToken: backendRes.accessToken,
+              refreshToken: backendRes.refreshToken,
+            })
+          }
+
           if (!backendRes.isNewUser && backendRes.user) {
             const userProfile: UserProfile = {
               ...backendRes.user,
@@ -209,6 +230,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           aiModelMode: data.aiModelMode,
         })
 
+        if (backendRes.accessToken) {
+          localStorage.setItem('neurons_access_token', backendRes.accessToken)
+          if (backendRes.refreshToken) {
+            localStorage.setItem('neurons_refresh_token', backendRes.refreshToken)
+          }
+          apiClient.setAuthTokens({
+            accessToken: backendRes.accessToken,
+            refreshToken: backendRes.refreshToken,
+          })
+        }
+
         if (backendRes.user) {
           createdProfile = {
             ...backendRes.user,
@@ -268,6 +300,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   // Logout
   const logout = useCallback(async () => {
     localStorage.removeItem('neurons_active_user_id')
+    localStorage.removeItem('neurons_access_token')
+    localStorage.removeItem('neurons_refresh_token')
+    apiClient.clearAuthTokens()
     setUser(null)
   }, [])
 

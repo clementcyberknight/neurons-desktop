@@ -30,6 +30,10 @@ interface OnboardingSlideshowProps {
   setAiMode: (val: AIModelMode) => void
   isDownloadingModel: boolean
   downloadProgress: number
+  downloadSpeed?: number
+  loadedMB?: number
+  totalMB?: number
+  etaSeconds?: number
   isModelDownloaded: boolean
   onStartLocalDownload: () => void
   isSubmitting: boolean
@@ -55,6 +59,10 @@ export const OnboardingSlideshow: React.FC<OnboardingSlideshowProps> = ({
   setAiMode,
   isDownloadingModel,
   downloadProgress,
+  downloadSpeed,
+  loadedMB,
+  totalMB,
+  etaSeconds,
   isModelDownloaded,
   onStartLocalDownload,
   isSubmitting,
@@ -115,6 +123,10 @@ export const OnboardingSlideshow: React.FC<OnboardingSlideshowProps> = ({
           setAiMode={setAiMode}
           isDownloadingModel={isDownloadingModel}
           downloadProgress={downloadProgress}
+          downloadSpeed={downloadSpeed}
+          loadedMB={loadedMB}
+          totalMB={totalMB}
+          etaSeconds={etaSeconds}
           isModelDownloaded={isModelDownloaded}
           onStartDownload={onStartLocalDownload}
         />

@@ -6,6 +6,7 @@ import type {
   MonthlyRevenueBracket,
   AIModelMode,
 } from '@/types/database'
+import { aiModelDownloader } from '@/services/aiModelDownloader'
 import { AuthHeader } from './components/AuthHeader'
 import { AuthFooter } from './components/AuthFooter'
 import { EmailStep } from './components/EmailStep'
@@ -36,10 +37,24 @@ export const AuthModule: React.FC = () => {
   const [monthlyRevenue, setMonthlyRevenue] = useState<MonthlyRevenueBracket>('1m_5m')
   const [aiMode, setAiMode] = useState<AIModelMode>('local_800mb')
 
-  // Local Model Download Simulation State
+  // Real Hugging Face AI Model Download State
   const [isDownloadingModel, setIsDownloadingModel] = useState(false)
   const [downloadProgress, setDownloadProgress] = useState(0)
+  const [downloadSpeed, setDownloadSpeed] = useState(0)
+  const [loadedMB, setLoadedMB] = useState(0)
+  const [totalMB, setTotalMB] = useState(697.8)
+  const [etaSeconds, setEtaSeconds] = useState(0)
   const [isModelDownloaded, setIsModelDownloaded] = useState(false)
+
+  // Check if model already downloaded in Cache Storage or Dexie
+  useEffect(() => {
+    aiModelDownloader.isModelDownloaded().then((isReady) => {
+      if (isReady) {
+        setIsModelDownloaded(true)
+        setDownloadProgress(100)
+      }
+    })
+  }, [])
 
   // Resend OTP Countdown timer with cleanup
   useEffect(() => {
@@ -108,23 +123,32 @@ export const AuthModule: React.FC = () => {
     }
   }
 
-  // Trigger Local AI Model Download Simulation
-  const handleStartLocalDownload = () => {
+  // Trigger Real Hugging Face AI Model Download
+  const handleStartLocalDownload = async () => {
     if (isDownloadingModel || isModelDownloaded) return
     setIsDownloadingModel(true)
+    setErrorMessage(null)
     setDownloadProgress(0)
 
-    const interval = setInterval(() => {
-      setDownloadProgress((prev) => {
-        if (prev >= 100) {
-          clearInterval(interval)
-          setIsDownloadingModel(false)
-          setIsModelDownloaded(true)
-          return 100
-        }
-        return prev + Math.floor(Math.random() * 12) + 8
+    try {
+      const completed = await aiModelDownloader.downloadModel((progress) => {
+        setDownloadProgress(progress.percent)
+        setDownloadSpeed(progress.speedMBps)
+        setLoadedMB(progress.loadedMB)
+        setTotalMB(progress.totalMB)
+        setEtaSeconds(progress.etaSeconds)
       })
-    }, 250)
+
+      if (completed) {
+        setIsModelDownloaded(true)
+        setDownloadProgress(100)
+      }
+    } catch (downloadErr) {
+      const msg = downloadErr instanceof Error ? downloadErr.message : 'Model download failed'
+      setErrorMessage(`Hugging Face model download failed: ${msg}. You can retry or switch to Cloud API.`)
+    } finally {
+      setIsDownloadingModel(false)
+    }
   }
 
   // Handle Onboarding Completion
@@ -246,6 +270,10 @@ export const AuthModule: React.FC = () => {
             setAiMode={setAiMode}
             isDownloadingModel={isDownloadingModel}
             downloadProgress={downloadProgress}
+            downloadSpeed={downloadSpeed}
+            loadedMB={loadedMB}
+            totalMB={totalMB}
+            etaSeconds={etaSeconds}
             isModelDownloaded={isModelDownloaded}
             onStartLocalDownload={handleStartLocalDownload}
             isSubmitting={isSubmitting}
