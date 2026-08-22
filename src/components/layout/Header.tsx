@@ -1,6 +1,5 @@
 import React, { useEffect, useState } from 'react'
 import {
-  Cloud,
   CloudOff,
   RefreshCw,
   AlertCircle,
@@ -9,7 +8,6 @@ import {
   Building2,
 } from 'lucide-react'
 import type { ActiveModule } from './Sidebar'
-import { db } from '@/db/localDb'
 import { useAuth } from '@/context/AuthContext'
 import { syncEngine, type SyncStats } from '@/db/syncEngine'
 
@@ -99,31 +97,6 @@ export const Header: React.FC<Props> = ({
     setPendingCount(count)
   }
 
-  const handleExportBackup = async () => {
-    const backupData = {
-      exportedAt: new Date().toISOString(),
-      documents: await db.documents.toArray(),
-      inventory: await db.inventory.toArray(),
-      staff: await db.staff.toArray(),
-      shifts: await db.shifts.toArray(),
-      transactions: await db.transactions.toArray(),
-      tasks: await db.tasks.toArray(),
-      finance: await db.finance.toArray(),
-      alerts: await db.alerts.toArray(),
-      userProfile: await db.userProfile.toArray(),
-    }
-    if (typeof window !== 'undefined' && window.electronAPI) {
-      await window.electronAPI.exportData(JSON.stringify(backupData, null, 2))
-    } else {
-      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = `neurons-backup-${new Date().toISOString().split('T')[0]}.json`
-      a.click()
-    }
-  }
-
   return (
     <header
       className="h-12 border-b border-neutral-200 bg-white px-4 flex items-center justify-between shrink-0 select-none pr-[144px]"
@@ -209,16 +182,6 @@ export const Header: React.FC<Props> = ({
               <span className="hidden sm:inline">Synced</span>
             </>
           )}
-        </button>
-
-        {/* Export Backup */}
-        <button
-          onClick={handleExportBackup}
-          className="h-7.5 inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 text-xs font-semibold text-neutral-800 hover:bg-neutral-100 hover:text-black transition-all shadow-xs cursor-pointer select-none"
-          title="Export offline JSON backup"
-        >
-          <Cloud className="h-3.5 w-3.5 text-neutral-500 shrink-0" />
-          <span className="hidden sm:inline leading-none">Backup</span>
         </button>
       </div>
     </header>

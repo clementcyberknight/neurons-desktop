@@ -22,7 +22,8 @@ import {
   ChevronLeft,
   ChevronRight,
 } from 'lucide-react'
-import { DOCUMENT_TEMPLATES, type DocumentTemplate } from './templates'
+import { useAuth } from '@/context/AuthContext'
+import { getDocumentTemplates, type DocumentTemplate } from './templates'
 import { DocumentEditor } from './DocumentEditor'
 
 interface Props {
@@ -40,10 +41,20 @@ const TEMPLATE_ICONS: Record<string, any> = {
 }
 
 export const DocumentsModule: React.FC<Props> = ({ searchQuery: externalSearchQuery = '' }) => {
+  const { user } = useAuth()
   const [activeDocId, setActiveDocId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState(externalSearchQuery)
   const [selectedFilter, setSelectedFilter] = useState<'all' | 'pinned' | 'policy' | 'sop' | 'report' | 'memo' | 'notes'>('all')
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid')
+
+  const templates = React.useMemo(() => {
+    return getDocumentTemplates({
+      companyName: user?.companyName,
+      authorName: user?.fullName,
+      currency: 'NGN',
+      role: user?.role,
+    })
+  }, [user?.companyName, user?.fullName, user?.role])
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1)
@@ -109,7 +120,7 @@ export const DocumentsModule: React.FC<Props> = ({ searchQuery: externalSearchQu
       content: tmpl.htmlContent,
       category: tmpl.category,
       tags: [tmpl.category.toUpperCase()],
-      author: 'Akhimien Clement',
+      author: user?.fullName || 'Business Owner',
       isPinned: false,
       createdAt: now,
       updatedAt: now,
@@ -182,7 +193,7 @@ export const DocumentsModule: React.FC<Props> = ({ searchQuery: externalSearchQu
 
             {/* Horizontally Aligned Blank Document Button */}
             <button
-              onClick={() => handleCreateFromTemplate(DOCUMENT_TEMPLATES[0])}
+              onClick={() => handleCreateFromTemplate(templates[0])}
               className="flex items-center gap-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white px-3 py-1.5 text-xs font-medium transition-all shadow-xs cursor-pointer"
             >
               <Plus className="h-3.5 w-3.5" />
@@ -191,7 +202,7 @@ export const DocumentsModule: React.FC<Props> = ({ searchQuery: externalSearchQu
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3">
-            {DOCUMENT_TEMPLATES.map((tmpl) => {
+            {templates.map((tmpl) => {
               const IconComponent = TEMPLATE_ICONS[tmpl.iconName] || FileText
               return (
                 <button
@@ -289,7 +300,7 @@ export const DocumentsModule: React.FC<Props> = ({ searchQuery: externalSearchQu
                 {searchQuery ? 'Try clearing your search filters or start a new document.' : 'Create a new blank document or choose a template above.'}
               </p>
               <button
-                onClick={() => handleCreateFromTemplate(DOCUMENT_TEMPLATES[0])}
+                onClick={() => handleCreateFromTemplate(templates[0])}
                 className="mt-4 inline-flex items-center gap-1.5 rounded-lg bg-black hover:bg-neutral-800 text-white px-3 py-1.5 text-xs font-semibold shadow-xs cursor-pointer"
               >
                 <Plus className="h-3.5 w-3.5" />

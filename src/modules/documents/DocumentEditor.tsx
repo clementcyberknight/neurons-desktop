@@ -28,6 +28,9 @@ import {
 } from 'lucide-react'
 import type { DocumentRecord } from '@/types/database'
 import { db } from '@/db/localDb'
+import { useAuth } from '@/context/AuthContext'
+import { DocumentAISidePanel } from './components/DocumentAISidePanel'
+import aiSparklesIcon from '@/assets/icons-pack/Ai-Sparkles--Streamline-Plump.png'
 
 interface Props {
   document: DocumentRecord
@@ -78,12 +81,14 @@ const HIGHLIGHT_COLORS = [
 ]
 
 export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, onDelete }) => {
+  const { user } = useAuth()
   const [doc, setDoc] = useState<DocumentRecord>(initialDoc)
   const [title, setTitle] = useState(initialDoc.title)
   const [category, setCategory] = useState(initialDoc.category)
   const [saveStatus, setSaveStatus] = useState<'saved' | 'saving'>('saved')
   const [wordCount, setWordCount] = useState(0)
   const [charCount, setCharCount] = useState(0)
+  const [isAIPanelOpen, setIsAIPanelOpen] = useState(false)
 
   // Color Pickers
   const [showColorPicker, setShowColorPicker] = useState(false)
@@ -182,29 +187,56 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
     })
   }
 
+  // Selection Preservation Helpers
+  const savedRangeRef = useRef<Range | null>(null)
+
+  const saveCurrentSelection = () => {
+    const sel = window.getSelection()
+    if (sel && sel.rangeCount > 0 && editorRef.current?.contains(sel.anchorNode)) {
+      savedRangeRef.current = sel.getRangeAt(0).cloneRange()
+    }
+  }
+
+  const restoreSelection = () => {
+    if (savedRangeRef.current) {
+      const sel = window.getSelection()
+      if (sel) {
+        sel.removeAllRanges()
+        sel.addRange(savedRangeRef.current)
+      }
+    }
+  }
+
   // Exec Command Formatting Helpers
   const execCmd = (cmd: string, val: string = '') => {
+    restoreSelection()
     editorRef.current?.focus()
     document.execCommand(cmd, false, val)
+    saveCurrentSelection()
     updateCounts()
     triggerAutoSave()
   }
 
   const handleStyleChange = (tag: string) => {
+    restoreSelection()
     editorRef.current?.focus()
     document.execCommand('formatBlock', false, tag)
+    saveCurrentSelection()
     triggerAutoSave()
   }
 
   const handleFontChange = (font: string) => {
     setCurrentFont(font)
+    restoreSelection()
     editorRef.current?.focus()
     document.execCommand('fontName', false, font)
+    saveCurrentSelection()
     triggerAutoSave()
   }
 
   const handleFontSizeChange = (size: string) => {
     setCurrentSize(size)
+    restoreSelection()
     const selection = window.getSelection()
     if (!selection || selection.rangeCount === 0) return
     const range = selection.getRangeAt(0)
@@ -212,20 +244,28 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
     span.style.fontSize = size
     span.appendChild(range.extractContents())
     range.insertNode(span)
+    saveCurrentSelection()
     triggerAutoSave()
   }
 
   const handleTextColor = (color: string) => {
     setShowColorPicker(false)
+    restoreSelection()
     editorRef.current?.focus()
     document.execCommand('foreColor', false, color)
+    saveCurrentSelection()
     triggerAutoSave()
   }
 
   const handleHighlight = (color: string) => {
     setShowHighlightPicker(false)
+    restoreSelection()
     editorRef.current?.focus()
-    document.execCommand('hiliteColor', false, color)
+    const applied = document.execCommand('hiliteColor', false, color)
+    if (!applied) {
+      document.execCommand('backColor', false, color)
+    }
+    saveCurrentSelection()
     triggerAutoSave()
   }
 
@@ -275,6 +315,10 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
 
   const insertSignatureBlock = () => {
     editorRef.current?.focus()
+    const authorName = user?.fullName || doc.author || 'Authorized Staff'
+    const roleTitle = user?.role ? `${user.role.charAt(0).toUpperCase() + user.role.slice(1)}` : 'Store Manager'
+    const company = user?.companyName || 'Business Organization'
+
     const signHtml = `
       <table style="width: 100%; border-collapse: collapse; margin-top: 36px; font-size: 13px;">
         <tbody>
@@ -282,13 +326,13 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
             <td style="width: 50%; padding-right: 24px;">
               <p style="margin: 0 0 32px 0; color: #6b7280; font-size: 12px;">Prepared By:</p>
               <div style="border-bottom: 1px solid #9ca3af; margin-bottom: 6px;"></div>
-              <p style="margin: 0; font-weight: 600; color: #111827;">Akhimien Clement (Store Manager)</p>
-              <p style="margin: 0; font-size: 11px; color: #6b7280;">Date: ${new Date().toLocaleDateString()}</p>
+              <p style="margin: 0; font-weight: 600; color: #111827;">${authorName} (${roleTitle})</p>
+              <p style="margin: 0; font-size: 11px; color: #6b7280;">For: ${company} • Date: ${new Date().toLocaleDateString()}</p>
             </td>
             <td style="width: 50%; padding-left: 24px;">
               <p style="margin: 0 0 32px 0; color: #6b7280; font-size: 12px;">Witnessed / Authorized By:</p>
               <div style="border-bottom: 1px solid #9ca3af; margin-bottom: 6px;"></div>
-              <p style="margin: 0; font-weight: 600; color: #111827;">Supervisor Signature & Stamp</p>
+              <p style="margin: 0; font-weight: 600; color: #111827;">Executive Auditor Signature & Stamp</p>
               <p style="margin: 0; font-size: 11px; color: #6b7280;">Date: ____________________</p>
             </td>
           </tr>
@@ -343,9 +387,9 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
   }
 
   return (
-    <div className="flex flex-col h-full bg-[#f3f4f6] select-none font-sans overflow-hidden">
+    <div className="flex flex-col h-full bg-[#f3f4f6] font-sans overflow-hidden">
       {/* 1. Top Document App Bar */}
-      <div className="h-14 bg-white border-b border-neutral-200 px-4 flex items-center justify-between shrink-0">
+      <div className="h-14 bg-white border-b border-neutral-200 px-4 flex items-center justify-between shrink-0 select-none">
         {/* Left: Back + Document Title Inline */}
         <div className="flex items-center gap-3 min-w-0">
           <button
@@ -401,6 +445,24 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
             <option value="notes">Notes</option>
           </select>
 
+          {/* Ask AI Assistant Toggle */}
+          <button
+            onClick={() => setIsAIPanelOpen(!isAIPanelOpen)}
+            className={`flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-xs font-semibold transition-all shadow-2xs cursor-pointer ${
+              isAIPanelOpen
+                ? 'bg-blue-600 border-blue-600 text-white shadow-blue-500/20 shadow-xs'
+                : 'bg-white border-neutral-200 text-neutral-800 hover:border-neutral-300 hover:bg-neutral-50'
+            }`}
+            title="Toggle Neurons AI Copilot"
+          >
+            <img
+              src={aiSparklesIcon}
+              alt="AI"
+              className={`h-3.5 w-3.5 object-contain ${isAIPanelOpen ? 'brightness-0 invert' : ''}`}
+            />
+            <span>Ask AI</span>
+          </button>
+
           {/* Pin Document */}
           <button
             onClick={handleTogglePin}
@@ -449,6 +511,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
       <div className="bg-white border-b border-neutral-200 px-4 py-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 shadow-2xs">
         {/* Undo / Redo */}
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('undo')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-600 hover:text-black transition-colors cursor-pointer"
           title="Undo (Ctrl+Z)"
@@ -456,6 +519,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
           <Undo2 className="h-4 w-4" />
         </button>
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('redo')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-600 hover:text-black transition-colors cursor-pointer"
           title="Redo (Ctrl+Y)"
@@ -467,6 +531,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
 
         {/* Paragraph Styles */}
         <select
+          onFocus={saveCurrentSelection}
           onChange={(e) => handleStyleChange(e.target.value)}
           defaultValue="p"
           className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 focus:outline-none cursor-pointer"
@@ -481,6 +546,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
 
         {/* Font Family */}
         <select
+          onFocus={saveCurrentSelection}
           value={currentFont}
           onChange={(e) => handleFontChange(e.target.value)}
           className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 focus:outline-none cursor-pointer max-w-[130px]"
@@ -493,6 +559,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
 
         {/* Font Size */}
         <select
+          onFocus={saveCurrentSelection}
           value={currentSize}
           onChange={(e) => handleFontSizeChange(e.target.value)}
           className="rounded border border-neutral-200 bg-white px-2 py-1 text-xs font-medium text-neutral-700 hover:bg-neutral-50 focus:outline-none cursor-pointer w-16"
@@ -507,6 +574,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
 
         {/* Bold, Italic, Underline, Strikethrough */}
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('bold')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black font-bold transition-colors cursor-pointer"
           title="Bold (Ctrl+B)"
@@ -514,6 +582,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
           <Bold className="h-4 w-4" />
         </button>
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('italic')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black italic transition-colors cursor-pointer"
           title="Italic (Ctrl+I)"
@@ -521,6 +590,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
           <Italic className="h-4 w-4" />
         </button>
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('underline')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black transition-colors cursor-pointer"
           title="Underline (Ctrl+U)"
@@ -528,6 +598,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
           <Underline className="h-4 w-4" />
         </button>
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('strikeThrough')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black transition-colors cursor-pointer"
           title="Strikethrough"
@@ -540,6 +611,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
         {/* Text Color Picker */}
         <div className="relative">
           <button
+            onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
             onClick={() => { setShowColorPicker(!showColorPicker); setShowHighlightPicker(false); setShowTableMenu(false); }}
             className="flex items-center gap-1 p-1.5 rounded hover:bg-neutral-100 text-neutral-700 transition-colors cursor-pointer"
             title="Text Color"
@@ -551,6 +623,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
               {TEXT_COLORS.map((c) => (
                 <button
                   key={c.value}
+                  onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                   onClick={() => handleTextColor(c.value)}
                   className="h-6 w-6 rounded-full border border-neutral-200 hover:scale-110 transition-transform cursor-pointer"
                   style={{ backgroundColor: c.value }}
@@ -564,6 +637,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
         {/* Highlight Color Picker */}
         <div className="relative">
           <button
+            onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
             onClick={() => { setShowHighlightPicker(!showHighlightPicker); setShowColorPicker(false); setShowTableMenu(false); }}
             className="flex items-center gap-1 p-1.5 rounded hover:bg-neutral-100 text-neutral-700 transition-colors cursor-pointer"
             title="Highlight Color"
@@ -575,6 +649,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
               {HIGHLIGHT_COLORS.map((h) => (
                 <button
                   key={h.value}
+                  onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                   onClick={() => handleHighlight(h.value)}
                   className="h-6 w-6 rounded border border-neutral-300 hover:scale-110 transition-transform cursor-pointer flex items-center justify-center text-[10px]"
                   style={{ backgroundColor: h.value }}
@@ -591,6 +666,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
 
         {/* Alignment */}
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('justifyLeft')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black transition-colors cursor-pointer"
           title="Align Left"
@@ -598,6 +674,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
           <AlignLeft className="h-4 w-4" />
         </button>
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('justifyCenter')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black transition-colors cursor-pointer"
           title="Align Center"
@@ -605,6 +682,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
           <AlignCenter className="h-4 w-4" />
         </button>
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('justifyRight')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black transition-colors cursor-pointer"
           title="Align Right"
@@ -612,6 +690,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
           <AlignRight className="h-4 w-4" />
         </button>
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('justifyFull')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black transition-colors cursor-pointer"
           title="Justify"
@@ -623,6 +702,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
 
         {/* Lists */}
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('insertUnorderedList')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black transition-colors cursor-pointer"
           title="Bulleted List"
@@ -630,6 +710,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
           <List className="h-4 w-4" />
         </button>
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('insertOrderedList')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black transition-colors cursor-pointer"
           title="Numbered List"
@@ -642,6 +723,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
         {/* Insert Table */}
         <div className="relative">
           <button
+            onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
             onClick={() => { setShowTableMenu(!showTableMenu); setShowColorPicker(false); setShowHighlightPicker(false); }}
             className="flex items-center gap-1 p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black transition-colors cursor-pointer"
             title="Insert Table"
@@ -652,18 +734,21 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
             <div className="absolute left-0 top-full mt-1.5 p-2 bg-white rounded-xl shadow-xl border border-neutral-200 z-50 w-44 space-y-1">
               <span className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider px-2 block mb-1">Table Grid</span>
               <button
+                onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                 onClick={() => insertTable(2, 2)}
                 className="w-full text-left px-2 py-1.5 text-xs text-neutral-800 hover:bg-neutral-100 rounded cursor-pointer"
               >
                 2 × 2 Standard Table
               </button>
               <button
+                onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                 onClick={() => insertTable(3, 3)}
                 className="w-full text-left px-2 py-1.5 text-xs text-neutral-800 hover:bg-neutral-100 rounded cursor-pointer"
               >
                 3 × 3 Matrix Table
               </button>
               <button
+                onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                 onClick={() => insertTable(4, 4)}
                 className="w-full text-left px-2 py-1.5 text-xs text-neutral-800 hover:bg-neutral-100 rounded cursor-pointer"
               >
@@ -676,6 +761,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
         {/* Insert Callout / Alert Box */}
         <div className="relative">
           <button
+            onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
             onClick={() => { setShowCalloutMenu(!showCalloutMenu); setShowTableMenu(false); }}
             className="flex items-center gap-1 p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black transition-colors cursor-pointer"
             title="Insert Callout Box"
@@ -685,18 +771,21 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
           {showCalloutMenu && (
             <div className="absolute left-0 top-full mt-1.5 p-2 bg-white rounded-xl shadow-xl border border-neutral-200 z-50 w-40 space-y-1">
               <button
+                onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                 onClick={() => insertCallout('info')}
                 className="w-full text-left px-2 py-1.5 text-xs text-blue-800 bg-blue-50 hover:bg-blue-100 rounded cursor-pointer font-medium"
               >
                 ℹ️ Note / Memo Box
               </button>
               <button
+                onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                 onClick={() => insertCallout('warning')}
                 className="w-full text-left px-2 py-1.5 text-xs text-amber-800 bg-amber-50 hover:bg-amber-100 rounded cursor-pointer font-medium"
               >
                 ⚠️ Warning / Protocol
               </button>
               <button
+                onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                 onClick={() => insertCallout('success')}
                 className="w-full text-left px-2 py-1.5 text-xs text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded cursor-pointer font-medium"
               >
@@ -708,6 +797,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
 
         {/* Signature Block */}
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={insertSignatureBlock}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black transition-colors cursor-pointer"
           title="Insert Official Signature Block"
@@ -717,6 +807,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
 
         {/* Divider / Horizontal Line */}
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={() => execCmd('insertHorizontalRule')}
           className="p-1.5 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black transition-colors cursor-pointer"
           title="Insert Horizontal Divider"
@@ -726,6 +817,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
 
         {/* Page Break */}
         <button
+          onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
           onClick={insertPageBreak}
           className="flex items-center gap-1 px-2 py-1 rounded hover:bg-neutral-100 text-neutral-700 hover:text-black text-xs font-medium transition-colors cursor-pointer"
           title="Insert New Page Break"
@@ -735,21 +827,47 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
         </button>
       </div>
 
-      {/* 3. Paginated Paper Canvas View (Word / Google Docs Sheet) */}
-      <div className="flex-1 overflow-y-auto no-scrollbar py-8 px-4 sm:px-8 flex justify-center bg-[#f3f4f6]">
-        {/* White Paper Page Sheet (A4 / US Letter Dimensions) */}
-        <div className="w-full max-w-[816px] min-h-[1056px] bg-white rounded-sm shadow-md border border-neutral-300/80 px-12 sm:px-16 py-14 text-neutral-900 transition-all focus-within:shadow-lg focus-within:border-neutral-400 mb-12">
-          <div
-            ref={editorRef}
-            contentEditable
-            onInput={handleEditorInput}
-            className="outline-none min-h-[900px] leading-relaxed text-[15px]"
-            style={{
-              fontFamily: currentFont,
-              fontSize: currentSize,
+      {/* 3. Paginated Paper Canvas View & AI Side Panel */}
+      <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 overflow-y-auto no-scrollbar py-8 px-4 sm:px-8 flex justify-center bg-[#f3f4f6] select-text cursor-text">
+          {/* White Paper Page Sheet (A4 / US Letter Dimensions) */}
+          <div className="w-full max-w-[816px] min-h-[1056px] bg-white rounded-sm shadow-md border border-neutral-300/80 px-12 sm:px-16 py-14 text-neutral-900 transition-all focus-within:shadow-lg focus-within:border-neutral-400 mb-12 select-text cursor-text">
+            <div
+              ref={editorRef}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={handleEditorInput}
+              onMouseUp={saveCurrentSelection}
+              onKeyUp={saveCurrentSelection}
+              className="outline-none min-h-[900px] leading-relaxed text-[15px] cursor-text select-text relative z-10"
+              style={{
+                fontFamily: currentFont,
+                fontSize: currentSize,
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Gemini-style Document AI Side Panel */}
+        {isAIPanelOpen && (
+          <DocumentAISidePanel
+            documentTitle={title}
+            documentContent={editorRef.current?.innerHTML || ''}
+            documentCategory={category}
+            onClose={() => setIsAIPanelOpen(false)}
+            onInsertContent={(content) => {
+              editorRef.current?.focus()
+              const formatted = content.includes('<') && content.includes('>')
+                ? content
+                : content
+                    .split('\n\n')
+                    .map((b) => `<p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin-bottom: 12px;">${b.replace(/\n/g, '<br>')}</p>`)
+                    .join('')
+              document.execCommand('insertHTML', false, formatted)
+              triggerAutoSave()
             }}
           />
-        </div>
+        )}
       </div>
 
       {/* 4. Bottom Status Bar */}
