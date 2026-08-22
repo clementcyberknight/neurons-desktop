@@ -31,7 +31,6 @@ export class LocalWllamaEngine {
     }
 
     if (this.isLoading) {
-      // Wait for ongoing initialization
       while (this.isLoading) {
         await new Promise((r) => setTimeout(r, 200))
       }
@@ -57,11 +56,12 @@ export class LocalWllamaEngine {
       const wasmPath = '/wllama/wllama.wasm'
 
       this.wllama = new Wllama({
+        default: wasmPath,
         'single-thread/wllama.wasm': wasmPath,
         'multi-thread/wllama.wasm': wasmPath,
       })
 
-      await this.wllama.loadModelFromBlob(file, {
+      await this.wllama.loadModel([file], {
         n_ctx: 2048,
         n_threads: 4,
       })
@@ -118,7 +118,7 @@ export class LocalWllamaEngine {
     const raw = response.choices?.[0]?.message?.content || ''
     const latencyMs = Date.now() - t0
     const wordCount = raw.split(/\s+/).filter(Boolean).length
-    const tokensPerSecond = latencyMs > 0 ? (wordCount / (latencyMs / 1000)) : 0
+    const tokensPerSecond = latencyMs > 0 ? wordCount / (latencyMs / 1000) : 0
 
     let cleanText = raw.trim()
     if (cleanText.startsWith('```json')) {
