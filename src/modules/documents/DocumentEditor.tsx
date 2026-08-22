@@ -133,6 +133,21 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
     }
   }, [initialDoc.id])
 
+  // Close any open popups when clicking outside
+  useEffect(() => {
+    const handleGlobalClick = (e: MouseEvent) => {
+      const target = e.target as HTMLElement
+      if (!target.closest('[data-dropdown="true"]')) {
+        setShowColorPicker(false)
+        setShowHighlightPicker(false)
+        setShowTableMenu(false)
+        setShowCalloutMenu(false)
+      }
+    }
+    window.addEventListener('mousedown', handleGlobalClick)
+    return () => window.removeEventListener('mousedown', handleGlobalClick)
+  }, [])
+
   const updateCounts = () => {
     if (!editorRef.current) return
     const text = editorRef.current.innerText || ''
@@ -269,32 +284,75 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
     triggerAutoSave()
   }
 
+  // Bulletproof HTML insertion helper (works at caret or appends if no caret)
+  const insertHtmlContent = (html: string) => {
+    editorRef.current?.focus()
+    restoreSelection()
+
+    let inserted = false
+    const sel = window.getSelection()
+
+    if (sel && sel.rangeCount > 0 && editorRef.current?.contains(sel.anchorNode)) {
+      const range = sel.getRangeAt(0)
+      range.deleteContents()
+      const tempDiv = document.createElement('div')
+      tempDiv.innerHTML = html
+      const frag = document.createDocumentFragment()
+      let node: ChildNode | null = null
+      let lastNode: ChildNode | null = null
+      while ((node = tempDiv.firstChild)) {
+        lastNode = frag.appendChild(node)
+      }
+      range.insertNode(frag)
+      if (lastNode) {
+        range.setStartAfter(lastNode)
+        range.collapse(true)
+        sel.removeAllRanges()
+        sel.addRange(range)
+      }
+      inserted = true
+    } else {
+      // Fallback 1: try execCommand
+      inserted = document.execCommand('insertHTML', false, html)
+      // Fallback 2: append to editor root if no caret existed
+      if (!inserted && editorRef.current) {
+        const tempDiv = document.createElement('div')
+        tempDiv.innerHTML = html
+        while (tempDiv.firstChild) {
+          editorRef.current.appendChild(tempDiv.firstChild)
+        }
+        inserted = true
+      }
+    }
+
+    saveCurrentSelection()
+    updateCounts()
+    triggerAutoSave()
+  }
+
   const insertTable = (rows: number, cols: number) => {
     setShowTableMenu(false)
-    editorRef.current?.focus()
 
-    let tableHtml = `<table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px;">`
-    tableHtml += `<thead><tr style="background-color: #f3f4f6; border-bottom: 2px solid #e5e7eb;">`
+    let tableHtml = `<table style="width: 100%; border-collapse: collapse; margin: 16px 0; font-size: 14px; border: 1px solid #d1d5db;">`
+    tableHtml += `<thead><tr style="background-color: #f3f4f6; border-bottom: 2px solid #cbd5e1;">`
     for (let c = 0; c < cols; c++) {
-      tableHtml += `<th style="border: 1px solid #e5e7eb; padding: 10px 12px; text-align: left; font-weight: 600; color: #374151;">Header ${c + 1}</th>`
+      tableHtml += `<th style="border: 1px solid #d1d5db; padding: 10px 12px; text-align: left; font-weight: 600; color: #1e293b;">Header ${c + 1}</th>`
     }
     tableHtml += `</tr></thead><tbody>`
     for (let r = 0; r < rows; r++) {
-      tableHtml += `<tr style="border-bottom: 1px solid #e5e7eb;">`
+      tableHtml += `<tr style="border-bottom: 1px solid #e2e8f0;">`
       for (let c = 0; c < cols; c++) {
-        tableHtml += `<td style="border: 1px solid #e5e7eb; padding: 10px 12px; color: #111827;">Sample cell</td>`
+        tableHtml += `<td style="border: 1px solid #d1d5db; padding: 10px 12px; color: #334155;">Data ${r + 1}, ${c + 1}</td>`
       }
       tableHtml += `</tr>`
     }
-    tableHtml += `</tbody></table><p style="font-size: 15px; color: #4b5563; line-height: 1.6;"><br></p>`
+    tableHtml += `</tbody></table><p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin-top: 12px;"><br></p>`
 
-    document.execCommand('insertHTML', false, tableHtml)
-    triggerAutoSave()
+    insertHtmlContent(tableHtml)
   }
 
   const insertCallout = (type: 'info' | 'warning' | 'success') => {
     setShowCalloutMenu(false)
-    editorRef.current?.focus()
 
     const config = {
       info: { bg: '#eff6ff', border: '#3b82f6', color: '#1e40af', title: 'NOTE / MEMO' },
@@ -309,12 +367,10 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
       </div>
       <p style="font-size: 15px; color: #4b5563; line-height: 1.6;"><br></p>
     `
-    document.execCommand('insertHTML', false, calloutHtml)
-    triggerAutoSave()
+    insertHtmlContent(calloutHtml)
   }
 
   const insertSignatureBlock = () => {
-    editorRef.current?.focus()
     const authorName = user?.fullName || doc.author || 'Authorized Staff'
     const roleTitle = user?.role ? `${user.role.charAt(0).toUpperCase() + user.role.slice(1)}` : 'Store Manager'
     const company = user?.companyName || 'Business Organization'
@@ -340,20 +396,17 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
       </table>
       <p style="font-size: 15px; color: #4b5563; line-height: 1.6;"><br></p>
     `
-    document.execCommand('insertHTML', false, signHtml)
-    triggerAutoSave()
+    insertHtmlContent(signHtml)
   }
 
   const insertPageBreak = () => {
-    editorRef.current?.focus()
     const pageBreakHtml = `
       <div style="page-break-after: always; margin: 32px 0; border-bottom: 2px dashed #d1d5db; position: relative; text-align: center;">
         <span style="background: #ffffff; padding: 0 12px; color: #9ca3af; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; position: relative; top: 8px;">Page Break</span>
       </div>
       <p style="font-size: 15px; color: #4b5563; line-height: 1.6;"><br></p>
     `
-    document.execCommand('insertHTML', false, pageBreakHtml)
-    triggerAutoSave()
+    insertHtmlContent(pageBreakHtml)
   }
 
   const handlePrint = () => {
@@ -508,7 +561,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
       </div>
 
       {/* 2. Google Docs / Word Formatting Ribbon */}
-      <div className="bg-white border-b border-neutral-200 px-4 py-1.5 flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0 shadow-2xs">
+      <div className="bg-white border-b border-neutral-200 px-4 py-1.5 flex items-center gap-1.5 shrink-0 shadow-2xs relative z-30 overflow-visible">
         {/* Undo / Redo */}
         <button
           onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
@@ -609,7 +662,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
         <div className="h-4 w-px bg-neutral-200 mx-1" />
 
         {/* Text Color Picker */}
-        <div className="relative">
+        <div className="relative" data-dropdown="true">
           <button
             onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
             onClick={() => { setShowColorPicker(!showColorPicker); setShowHighlightPicker(false); setShowTableMenu(false); }}
@@ -619,13 +672,13 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
             <Palette className="h-4 w-4" />
           </button>
           {showColorPicker && (
-            <div className="absolute left-0 top-full mt-1.5 p-2 bg-white rounded-xl shadow-xl border border-neutral-200 z-50 grid grid-cols-4 gap-1.5 w-36">
+            <div className="absolute left-0 top-full mt-2 p-2.5 bg-white rounded-xl shadow-2xl border border-neutral-200 z-50 grid grid-cols-4 gap-1.5 w-36 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
               {TEXT_COLORS.map((c) => (
                 <button
                   key={c.value}
                   onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                   onClick={() => handleTextColor(c.value)}
-                  className="h-6 w-6 rounded-full border border-neutral-200 hover:scale-110 transition-transform cursor-pointer"
+                  className="h-6 w-6 rounded-full border border-neutral-200 hover:scale-110 transition-transform cursor-pointer shadow-2xs"
                   style={{ backgroundColor: c.value }}
                   title={c.name}
                 />
@@ -635,7 +688,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
         </div>
 
         {/* Highlight Color Picker */}
-        <div className="relative">
+        <div className="relative" data-dropdown="true">
           <button
             onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
             onClick={() => { setShowHighlightPicker(!showHighlightPicker); setShowColorPicker(false); setShowTableMenu(false); }}
@@ -645,13 +698,13 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
             <Highlighter className="h-4 w-4" />
           </button>
           {showHighlightPicker && (
-            <div className="absolute left-0 top-full mt-1.5 p-2 bg-white rounded-xl shadow-xl border border-neutral-200 z-50 grid grid-cols-4 gap-1.5 w-36">
+            <div className="absolute left-0 top-full mt-2 p-2.5 bg-white rounded-xl shadow-2xl border border-neutral-200 z-50 grid grid-cols-4 gap-1.5 w-36 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
               {HIGHLIGHT_COLORS.map((h) => (
                 <button
                   key={h.value}
                   onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                   onClick={() => handleHighlight(h.value)}
-                  className="h-6 w-6 rounded border border-neutral-300 hover:scale-110 transition-transform cursor-pointer flex items-center justify-center text-[10px]"
+                  className="h-6 w-6 rounded border border-neutral-300 hover:scale-110 transition-transform cursor-pointer flex items-center justify-center text-[10px] shadow-2xs font-bold"
                   style={{ backgroundColor: h.value }}
                   title={h.name}
                 >
@@ -721,7 +774,7 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
         <div className="h-4 w-px bg-neutral-200 mx-1" />
 
         {/* Insert Table */}
-        <div className="relative">
+        <div className="relative" data-dropdown="true">
           <button
             onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
             onClick={() => { setShowTableMenu(!showTableMenu); setShowColorPicker(false); setShowHighlightPicker(false); }}
@@ -731,35 +784,35 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
             <TableIcon className="h-4 w-4" />
           </button>
           {showTableMenu && (
-            <div className="absolute left-0 top-full mt-1.5 p-2 bg-white rounded-xl shadow-xl border border-neutral-200 z-50 w-44 space-y-1">
-              <span className="text-[11px] font-semibold text-neutral-400 uppercase tracking-wider px-2 block mb-1">Table Grid</span>
+            <div className="absolute left-0 top-full mt-2 p-2 bg-white rounded-xl shadow-2xl border border-neutral-200 z-50 w-48 space-y-1 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
+              <span className="text-[11px] font-bold text-neutral-400 uppercase tracking-wider px-2 block mb-1 font-mono">Select Table Grid</span>
               <button
                 onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                 onClick={() => insertTable(2, 2)}
-                className="w-full text-left px-2 py-1.5 text-xs text-neutral-800 hover:bg-neutral-100 rounded cursor-pointer"
+                className="w-full text-left px-2.5 py-1.5 text-xs text-neutral-800 hover:bg-blue-50 hover:text-blue-700 rounded-lg cursor-pointer font-medium transition-colors"
               >
-                2 × 2 Standard Table
+                📊 2 × 2 Standard Table
               </button>
               <button
                 onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                 onClick={() => insertTable(3, 3)}
-                className="w-full text-left px-2 py-1.5 text-xs text-neutral-800 hover:bg-neutral-100 rounded cursor-pointer"
+                className="w-full text-left px-2.5 py-1.5 text-xs text-neutral-800 hover:bg-blue-50 hover:text-blue-700 rounded-lg cursor-pointer font-medium transition-colors"
               >
-                3 × 3 Matrix Table
+                📊 3 × 3 Matrix Table
               </button>
               <button
                 onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                 onClick={() => insertTable(4, 4)}
-                className="w-full text-left px-2 py-1.5 text-xs text-neutral-800 hover:bg-neutral-100 rounded cursor-pointer"
+                className="w-full text-left px-2.5 py-1.5 text-xs text-neutral-800 hover:bg-blue-50 hover:text-blue-700 rounded-lg cursor-pointer font-medium transition-colors"
               >
-                4 × 4 Financial Table
+                📊 4 × 4 Financial Table
               </button>
             </div>
           )}
         </div>
 
         {/* Insert Callout / Alert Box */}
-        <div className="relative">
+        <div className="relative" data-dropdown="true">
           <button
             onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
             onClick={() => { setShowCalloutMenu(!showCalloutMenu); setShowTableMenu(false); }}
@@ -769,25 +822,25 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
             <Info className="h-4 w-4" />
           </button>
           {showCalloutMenu && (
-            <div className="absolute left-0 top-full mt-1.5 p-2 bg-white rounded-xl shadow-xl border border-neutral-200 z-50 w-40 space-y-1">
+            <div className="absolute left-0 top-full mt-2 p-2 bg-white rounded-xl shadow-2xl border border-neutral-200 z-50 w-44 space-y-1 ring-1 ring-black/5 animate-in fade-in zoom-in-95 duration-100">
               <button
                 onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                 onClick={() => insertCallout('info')}
-                className="w-full text-left px-2 py-1.5 text-xs text-blue-800 bg-blue-50 hover:bg-blue-100 rounded cursor-pointer font-medium"
+                className="w-full text-left px-2 py-1.5 text-xs text-blue-800 bg-blue-50 hover:bg-blue-100 rounded-lg cursor-pointer font-medium transition-colors"
               >
                 ℹ️ Note / Memo Box
               </button>
               <button
                 onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                 onClick={() => insertCallout('warning')}
-                className="w-full text-left px-2 py-1.5 text-xs text-amber-800 bg-amber-50 hover:bg-amber-100 rounded cursor-pointer font-medium"
+                className="w-full text-left px-2 py-1.5 text-xs text-amber-800 bg-amber-50 hover:bg-amber-100 rounded-lg cursor-pointer font-medium transition-colors"
               >
                 ⚠️ Warning / Protocol
               </button>
               <button
                 onMouseDown={(e) => { e.preventDefault(); saveCurrentSelection(); }}
                 onClick={() => insertCallout('success')}
-                className="w-full text-left px-2 py-1.5 text-xs text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded cursor-pointer font-medium"
+                className="w-full text-left px-2 py-1.5 text-xs text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg cursor-pointer font-medium transition-colors"
               >
                 ✅ Approved / Success
               </button>
@@ -856,15 +909,13 @@ export const DocumentEditor: React.FC<Props> = ({ document: initialDoc, onBack, 
             documentCategory={category}
             onClose={() => setIsAIPanelOpen(false)}
             onInsertContent={(content) => {
-              editorRef.current?.focus()
               const formatted = content.includes('<') && content.includes('>')
                 ? content
                 : content
                     .split('\n\n')
                     .map((b) => `<p style="font-size: 15px; color: #4b5563; line-height: 1.6; margin-bottom: 12px;">${b.replace(/\n/g, '<br>')}</p>`)
                     .join('')
-              document.execCommand('insertHTML', false, formatted)
-              triggerAutoSave()
+              insertHtmlContent(formatted)
             }}
           />
         )}
