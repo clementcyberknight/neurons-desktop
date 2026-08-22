@@ -108,21 +108,21 @@ export class LocalWllamaEngine {
       if (file) {
         console.info(`[LocalWllamaEngine] Loading model from local storage (${(file.size / (1024 * 1024)).toFixed(1)} MB)...`)
         await this.wllama.loadModel([file], {
-          n_ctx: 1024,
-          n_threads: 2,
+          n_ctx: 8192,
+          n_threads: 4,
         })
       } else {
         console.info('[LocalWllamaEngine] Loading model from URL/Cache...')
         await this.wllama.loadModelFromUrl(MODEL_METADATA.downloadUrl, {
-          n_ctx: 1024,
-          n_threads: 2,
+          n_ctx: 8192,
+          n_threads: 4,
           useCache: true,
         })
       }
 
       this.isLoaded = true
       this.isLoading = false
-      console.info('[LocalWllamaEngine] Model successfully loaded and ready for inference.')
+      console.info('[LocalWllamaEngine] Model successfully loaded with 8,192 token context window.')
       return true
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err)
@@ -146,7 +146,7 @@ export class LocalWllamaEngine {
     const t0 = Date.now()
 
     const timeoutPromise = new Promise<never>((_, reject) => {
-      setTimeout(() => reject(new Error('Local inference timed out (30s).')), 30000)
+      setTimeout(() => reject(new Error('Local inference timed out (60s).')), 60000)
     })
 
     const runInference = async (): Promise<LocalGenerateResult> => {
@@ -174,7 +174,7 @@ export class LocalWllamaEngine {
       const response = await this.wllama.createChatCompletion({
         messages,
         temperature: options.temperature ?? 0.2,
-        max_tokens: options.maxTokens ?? 256,
+        max_tokens: options.maxTokens ?? 2048,
       })
 
       const raw = response.choices?.[0]?.message?.content || ''
