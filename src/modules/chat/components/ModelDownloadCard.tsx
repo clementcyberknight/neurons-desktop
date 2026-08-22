@@ -10,7 +10,35 @@ export const ModelDownloadCard: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    aiModelDownloader.isModelDownloaded().then(setIsDownloaded)
+    let isMounted = true
+
+    const checkStatus = async () => {
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI?.checkAIStatus) {
+          const status = await window.electronAPI.checkAIStatus()
+          if (status.exists && isMounted) {
+            setIsDownloaded(true)
+            return
+          }
+        }
+
+        const downloaded = await aiModelDownloader.isModelDownloaded()
+        if (isMounted) {
+          setIsDownloaded(downloaded)
+        }
+      } catch (statusError) {
+        console.warn('[ModelDownloadCard] Model status check error:', statusError)
+        if (isMounted) {
+          setIsDownloaded(false)
+        }
+      }
+    }
+
+    checkStatus()
+
+    return () => {
+      isMounted = false
+    }
   }, [])
 
   const handleDownload = async () => {
@@ -18,19 +46,44 @@ export const ModelDownloadCard: React.FC = () => {
     setError(null)
 
     try {
+      // 1. Electron Native Stream Download directly to SSD disk
+      if (typeof window !== 'undefined' && window.electronAPI?.downloadAIModel) {
+        let cleanupProgress: (() => void) | null = null
+
+        if (window.electronAPI.onAIDownloadProgress) {
+          cleanupProgress = window.electronAPI.onAIDownloadProgress((p) => {
+            setProgress(p)
+          })
+        }
+
+        const res = await window.electronAPI.downloadAIModel()
+        if (cleanupProgress) {
+          cleanupProgress()
+        }
+
+        if (res.success) {
+          setIsDownloaded(true)
+          return
+        }
+        throw new Error('Native download did not complete successfully.')
+      }
+
+      // 2. Browser OPFS / CacheStorage Download
       const success = await aiModelDownloader.downloadModel((p) => {
         setProgress(p)
       })
 
       if (success) {
         setIsDownloaded(true)
-        // Warm up local WebAssembly engine
-        localWllamaEngine.init().catch(console.warn)
+        localWllamaEngine.init().catch((wllamaInitErr) => {
+          console.warn('[ModelDownloadCard] Engine warmup notice:', wllamaInitErr)
+        })
       } else {
         setError('Download was interrupted. Please try again.')
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err)
+      console.error('[ModelDownloadCard] Download error:', msg)
       setError(msg || 'Failed to download AI model from Hugging Face.')
     } finally {
       setDownloading(false)
@@ -61,16 +114,16 @@ export const ModelDownloadCard: React.FC = () => {
       </div>
 
       <p className="mt-3 text-xs text-neutral-600 leading-relaxed">
-        Download this local AI model to run 100% offline on your device with zero cloud latency and complete data privacy.
+        Download this local AI model to run 100% offline on your device with zero cloud latency, native C++ hardware acceleration, and complete privacy.
       </p>
 
       {/* Feature Pills */}
       <div className="mt-3.5 flex flex-wrap gap-2 text-[11px] text-neutral-600">
         <span className="inline-flex items-center gap-1 rounded-md bg-white border border-neutral-200 px-2 py-1">
-          <HardDrive className="h-3 w-3 text-neutral-500" /> SSD OPFS Cache
+          <HardDrive className="h-3 w-3 text-neutral-500" /> Native SSD Storage
         </span>
         <span className="inline-flex items-center gap-1 rounded-md bg-white border border-neutral-200 px-2 py-1">
-          <Zap className="h-3 w-3 text-amber-500" /> WebAssembly SIMD
+          <Zap className="h-3 w-3 text-amber-500" /> C++ AVX2 Acceleration
         </span>
       </div>
 

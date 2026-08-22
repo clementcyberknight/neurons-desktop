@@ -61,7 +61,17 @@ export class AIChatService {
       console.warn('[AIChatService] Unable to read local workspace context from database:', dbError)
     }
 
-    const localModelReady = await aiModelDownloader.isModelDownloaded()
+    let localModelReady = false
+    if (typeof window !== 'undefined' && window.electronAPI?.checkAIStatus) {
+      try {
+        const status = await window.electronAPI.checkAIStatus()
+        localModelReady = Boolean(status.exists)
+      } catch {
+        localModelReady = false
+      }
+    } else {
+      localModelReady = await aiModelDownloader.isModelDownloaded()
+    }
 
     return {
       companyName,
@@ -85,6 +95,39 @@ export class AIChatService {
     }
 
     if (context.aiMode === 'local_800mb') {
+      // 1. Native Desktop Electron Inference with node-llama-cpp
+      if (typeof window !== 'undefined' && window.electronAPI?.generateAI) {
+        try {
+          const status = await window.electronAPI.checkAIStatus()
+          if (status.exists) {
+            const electronResult = await window.electronAPI.generateAI({
+              prompt,
+              systemPrompt: options.systemPrompt,
+              temperature: options.thinkMode ? 0.4 : 0.2,
+              maxTokens: 2048,
+            })
+
+            return {
+              raw: electronResult.raw,
+              parsedJson: electronResult.parsedJson as unknown as LLMOutputSchema | undefined,
+              outputType: electronResult.outputType || 'CONVERSATIONAL_CHAT',
+              latencyMs: electronResult.latencyMs || Date.now() - t0,
+              engineMode: 'local_800mb',
+            }
+          }
+        } catch (electronErr: unknown) {
+          const errMsg = electronErr instanceof Error ? electronErr.message : String(electronErr)
+          console.error('[AIChatService] Native Electron local inference error:', errMsg)
+          return {
+            raw: `⚠️ **Local AI Engine Error**\n\n${errMsg}\n\nPlease try sending your message again.`,
+            outputType: 'CONVERSATIONAL_CHAT',
+            latencyMs: Date.now() - t0,
+            engineMode: 'local_800mb',
+          }
+        }
+      }
+
+      // 2. Browser WebAssembly Inference
       if (context.localModelReady) {
         try {
           const wllamaResult = await localWllamaEngine.generate({

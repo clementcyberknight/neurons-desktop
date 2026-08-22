@@ -60,7 +60,13 @@ ipcMain.handle('ai:generate', async (_, params) => {
 })
 
 ipcMain.handle('ai:status', async () => {
-  return true
+  return await aiBridge.checkStatus()
+})
+
+ipcMain.handle('ai:download-model', async (event) => {
+  return await aiBridge.downloadModel((progress) => {
+    event.sender.send('ai:download-progress', progress)
+  })
 })
 
 ipcMain.handle('app:info', () => {
