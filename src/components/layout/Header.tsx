@@ -1,12 +1,17 @@
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import {
   Cloud,
+  CloudOff,
+  RefreshCw,
+  AlertCircle,
+  CheckCircle2,
   PanelLeftOpen,
-  Sparkles,
+  Building2,
 } from 'lucide-react'
 import type { ActiveModule } from './Sidebar'
 import { db } from '@/db/localDb'
-import { openWebsite } from '@/utils/openWebsite'
+import { useAuth } from '@/context/AuthContext'
+import { syncEngine, type SyncStats } from '@/db/syncEngine'
 
 interface Props {
   activeModule: ActiveModule
@@ -64,7 +69,35 @@ export const Header: React.FC<Props> = ({
   isSidebarCollapsed = false,
   onToggleSidebar,
 }) => {
+  const { user } = useAuth()
   const meta = MODULE_METADATA[activeModule] || MODULE_METADATA.documents
+  const [syncStats, setSyncStats] = useState<SyncStats>(syncEngine.getStats())
+  const [pendingCount, setPendingCount] = useState<number>(0)
+
+  useEffect(() => {
+    const unsubscribe = syncEngine.subscribe((stats) => {
+      setSyncStats(stats)
+    })
+
+    const updatePending = async () => {
+      const count = await syncEngine.countPending()
+      setPendingCount(count)
+    }
+
+    updatePending()
+    const interval = setInterval(updatePending, 5000)
+
+    return () => {
+      unsubscribe()
+      clearInterval(interval)
+    }
+  }, [])
+
+  const handleManualSync = async () => {
+    await syncEngine.triggerSync()
+    const count = await syncEngine.countPending()
+    setPendingCount(count)
+  }
 
   const handleExportBackup = async () => {
     const backupData = {
@@ -77,6 +110,7 @@ export const Header: React.FC<Props> = ({
       tasks: await db.tasks.toArray(),
       finance: await db.finance.toArray(),
       alerts: await db.alerts.toArray(),
+      userProfile: await db.userProfile.toArray(),
     }
     if (typeof window !== 'undefined' && window.electronAPI) {
       await window.electronAPI.exportData(JSON.stringify(backupData, null, 2))
@@ -107,27 +141,80 @@ export const Header: React.FC<Props> = ({
           </button>
         )}
         <div>
-          <h2 className="text-sm font-semibold text-neutral-900 tracking-tight leading-tight">{meta.title}</h2>
+          <h2 className="text-sm font-bold text-neutral-900 tracking-tight leading-tight">{meta.title}</h2>
           <p className="text-[11px] text-neutral-500 hidden sm:block truncate max-w-md leading-tight">{meta.subtitle}</p>
         </div>
       </div>
 
-      {/* Global Actions - Aligned with window controls */}
+      {/* Global Actions */}
       <div className="flex items-center h-full gap-2" style={{ WebkitAppRegion: 'no-drag' }}>
-        {/* Upgrade Action */}
+        {/* Active Company Name Badge */}
+        {user?.companyName && (
+          <div className="hidden md:flex items-center gap-1.5 px-3 py-1 rounded-full bg-neutral-100 border border-neutral-200/80 text-xs font-semibold text-neutral-800">
+            <Building2 className="h-3.5 w-3.5 text-neutral-500" />
+            <span className="truncate max-w-[160px]">{user.companyName}</span>
+          </div>
+        )}
+
+        {/* Live Sync Status Pill */}
         <button
-          onClick={() => openWebsite('https://neurons.com')}
-          className="h-7.5 inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50/70 px-2.5 text-xs font-semibold text-blue-600 hover:bg-blue-100 hover:text-blue-700 transition-all cursor-pointer select-none"
-          title="Upgrade plan on neurons.com"
+          onClick={handleManualSync}
+          disabled={syncStats.isSyncing}
+          className={`h-7.5 inline-flex items-center gap-1.5 rounded-lg border px-2.5 text-xs font-medium transition-all shadow-xs cursor-pointer select-none ${
+            syncStats.isSyncing
+              ? 'border-blue-200 bg-blue-50 text-blue-700'
+              : syncStats.lastError
+              ? 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100'
+              : !syncStats.isOnline
+              ? 'border-neutral-200 bg-neutral-50 text-neutral-600'
+              : pendingCount > 0
+              ? 'border-amber-200 bg-amber-50 text-amber-800 hover:bg-amber-100'
+              : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+          }`}
+          title={
+            syncStats.lastError
+              ? `Sync Error: ${syncStats.lastError.message} (Click to retry)`
+              : syncStats.isSyncing
+              ? 'Syncing changes with cloud...'
+              : !syncStats.isOnline
+              ? 'Offline mode (Changes saved locally)'
+              : pendingCount > 0
+              ? `${pendingCount} pending items to sync (Click to sync now)`
+              : 'Cloud sync up to date'
+          }
         >
-          <Sparkles className="h-3 w-3 fill-blue-600 text-blue-600 shrink-0" />
-          <span className="leading-none">Upgrade</span>
+          {syncStats.isSyncing ? (
+            <>
+              <RefreshCw className="h-3.5 w-3.5 animate-spin text-blue-600 shrink-0" />
+              <span className="hidden sm:inline">Syncing...</span>
+            </>
+          ) : syncStats.lastError ? (
+            <>
+              <AlertCircle className="h-3.5 w-3.5 text-red-600 shrink-0" />
+              <span className="hidden sm:inline">Sync Error</span>
+            </>
+          ) : !syncStats.isOnline ? (
+            <>
+              <CloudOff className="h-3.5 w-3.5 text-neutral-500 shrink-0" />
+              <span className="hidden sm:inline">Offline</span>
+            </>
+          ) : pendingCount > 0 ? (
+            <>
+              <RefreshCw className="h-3.5 w-3.5 text-amber-600 shrink-0" />
+              <span className="hidden sm:inline">{pendingCount} Pending</span>
+            </>
+          ) : (
+            <>
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-600 shrink-0" />
+              <span className="hidden sm:inline">Synced</span>
+            </>
+          )}
         </button>
 
         {/* Export Backup */}
         <button
           onClick={handleExportBackup}
-          className="h-7.5 inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 text-xs font-medium text-neutral-700 hover:bg-neutral-50 hover:text-black transition-all shadow-xs cursor-pointer select-none"
+          className="h-7.5 inline-flex items-center gap-1.5 rounded-lg border border-neutral-200 bg-white px-2.5 text-xs font-semibold text-neutral-800 hover:bg-neutral-100 hover:text-black transition-all shadow-xs cursor-pointer select-none"
           title="Export offline JSON backup"
         >
           <Cloud className="h-3.5 w-3.5 text-neutral-500 shrink-0" />

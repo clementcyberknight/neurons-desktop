@@ -5,10 +5,14 @@ import {
   PanelLeftOpen,
   History,
   Clock,
+  LogOut,
+  Cpu,
+  Cloud,
 } from 'lucide-react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { db } from '@/db/localDb'
 import { initializeSeedDataIfEmpty } from '@/db/seedData'
+import { useAuth } from '@/context/AuthContext'
 
 // Internal Icons Pack (Offline-First)
 import iconDocument from '@/assets/icons-pack/File-Folder--Streamline-Plump.png'
@@ -69,6 +73,8 @@ export const Sidebar: React.FC<Props> = ({
   onSelectChatSession,
   onOpenHistory,
 }) => {
+  const { user, logout } = useAuth()
+
   // Query chats and task history from Dexie database
   const chatSessions =
     useLiveQuery(() => db.chatSessions.orderBy('lastMessageAt').reverse().limit(30).toArray()) || []
@@ -85,6 +91,15 @@ export const Sidebar: React.FC<Props> = ({
       onSelectModule('chat')
     }
   }
+
+  const initials = user?.fullName
+    ? user.fullName
+        .split(' ')
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((n) => n[0].toUpperCase())
+        .join('')
+    : 'NB'
 
   if (isCollapsed) {
     return (
@@ -134,10 +149,11 @@ export const Sidebar: React.FC<Props> = ({
 
         {/* User Avatar */}
         <div
-          className="flex h-8 w-8 items-center justify-center rounded-full bg-[#10a37f] text-white text-xs font-semibold cursor-pointer shadow-xs"
-          title="Akhimien Clement (Free)"
+          onClick={logout}
+          className="flex h-8 w-8 items-center justify-center rounded-full bg-black text-white text-xs font-semibold cursor-pointer shadow-xs"
+          title={`${user?.fullName || 'User'} (${user?.companyName || 'Business'}) • Click to Logout`}
         >
-          AC
+          {initials}
         </div>
       </aside>
     )
@@ -149,9 +165,14 @@ export const Sidebar: React.FC<Props> = ({
       <div className="flex flex-col min-h-0 flex-1 overflow-y-auto">
         {/* Neurons Header */}
         <div className="flex items-center justify-between px-3.5 h-12 pt-1">
-          <h1 className="text-base font-semibold text-neutral-900 tracking-tight">
-            Neurons
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-base font-extrabold text-neutral-900 tracking-tight">
+              Neurons
+            </h1>
+            <span className="text-[10px] font-mono font-bold uppercase px-2 py-0.5 rounded-full bg-black text-white">
+              {user?.aiModelMode === 'cloud_api' ? 'Cloud AI' : 'Local 800MB'}
+            </span>
+          </div>
 
           <div className="flex items-center gap-1">
             {onToggleCollapse && (
@@ -179,24 +200,24 @@ export const Sidebar: React.FC<Props> = ({
                     : 'text-neutral-700 hover:bg-neutral-200/60 hover:text-neutral-900 font-medium'
                 }`}
               >
-                <SquarePen className="h-4 w-4 text-neutral-700 shrink-0" />
+                <SquarePen className="h-4 w-4 text-neutral-700" />
                 <span>New chat</span>
               </button>
             )
           })()}
         </div>
 
-        {/* Complete Visible Navigation List */}
-        <div className="px-3 py-1 space-y-0.5">
+        {/* Module Navigation List */}
+        <div className="px-3 py-1.5 space-y-0.5">
           {NAV_ITEMS.map((item) => {
             const isActive = activeModule === item.id
             return (
               <button
                 key={item.id}
                 onClick={() => onSelectModule(item.id)}
-                className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors text-left cursor-pointer ${
+                className={`w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-lg text-xs font-semibold transition-all text-left cursor-pointer ${
                   isActive
-                    ? 'bg-neutral-200/90 text-black font-semibold shadow-2xs'
+                    ? 'bg-neutral-200/90 text-black shadow-2xs font-bold'
                     : 'text-neutral-700 hover:bg-neutral-200/60 hover:text-neutral-900'
                 }`}
               >
@@ -263,27 +284,27 @@ export const Sidebar: React.FC<Props> = ({
 
       {/* User Profile Footer */}
       <div className="p-3 border-t border-neutral-200 bg-[#f9f9f9]">
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-[#10a37f] text-white text-xs font-semibold shrink-0">
-              AC
+            <div className="flex h-8 w-8 items-center justify-center rounded-full bg-black text-white text-xs font-bold shrink-0 shadow-2xs">
+              {initials}
             </div>
             <div className="min-w-0">
-              <div className="text-sm font-medium text-neutral-900 truncate leading-tight">
-                Akhimien Cleme...
+              <div className="text-xs font-bold text-neutral-900 truncate leading-tight">
+                {user?.fullName || 'Business Admin'}
               </div>
-              <div className="text-xs text-neutral-500 leading-tight">
-                Free
+              <div className="text-[11px] text-neutral-500 truncate leading-tight">
+                {user?.companyName || 'Neurons Business'}
               </div>
             </div>
           </div>
 
           <button
-            onClick={() => openWebsite('https://neurons.com')}
-            className="rounded-full border border-neutral-300 bg-white px-3 py-1 text-xs font-medium text-neutral-800 hover:bg-neutral-100 hover:text-black transition-all shrink-0 shadow-2xs cursor-pointer"
-            title="Upgrade plan on neurons.com"
+            onClick={logout}
+            className="p-1.5 rounded-lg text-neutral-400 hover:text-red-600 hover:bg-red-50 transition-colors shrink-0 cursor-pointer"
+            title="Sign out of workspace"
           >
-            Upgrade
+            <LogOut className="h-4 w-4" />
           </button>
         </div>
       </div>

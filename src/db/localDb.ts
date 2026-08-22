@@ -13,6 +13,9 @@ import type {
   BankAccountRecord,
   InvoiceRecord,
   ChatSession,
+  UserProfile,
+  AppSettings,
+  AuditLogEntry,
 } from '@/types/database'
 
 export class BAUDatabase extends Dexie {
@@ -29,11 +32,14 @@ export class BAUDatabase extends Dexie {
   bankAccounts!: EntityTable<BankAccountRecord, 'id'>
   invoices!: EntityTable<InvoiceRecord, 'id'>
   chatSessions!: EntityTable<ChatSession, 'id'>
+  userProfile!: EntityTable<UserProfile, 'id'>
+  appSettings!: EntityTable<AppSettings, 'id'>
+  auditLogs!: EntityTable<AuditLogEntry, 'id'>
 
   constructor() {
     super('BAUBusinessDB')
 
-    this.version(3).stores({
+    this.version(5).stores({
       documents: 'id, category, updatedAt, createdAt, synced, isPinned, [category+updatedAt]',
       transactions: 'id, receiptNumber, cashierId, posStation, status, paymentMethod, createdAt, updatedAt, synced, [status+createdAt], [paymentMethod+createdAt]',
       inventory: 'id, sku, name, category, zone, quantity, minThreshold, type, updatedAt, createdAt, synced, [type+updatedAt], [category+updatedAt]',
@@ -47,6 +53,9 @@ export class BAUDatabase extends Dexie {
       bankAccounts: 'id, bankName, accountType, updatedAt, synced',
       invoices: 'id, invoiceNumber, customerName, status, dueDate, updatedAt, synced, [status+dueDate]',
       chatSessions: 'id, title, lastMessageAt, createdAt, updatedAt, synced',
+      userProfile: 'id, email, companyName, onboardingCompleted, createdAt, updatedAt, synced',
+      appSettings: 'id, aiModelMode, customBackendEndpoint, updatedAt, synced',
+      auditLogs: 'id, orgId, userId, action, entityType, entityId, createdAt, synced, [action+createdAt]',
     })
   }
 }

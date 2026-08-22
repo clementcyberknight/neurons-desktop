@@ -211,3 +211,51 @@ export interface ChatSession extends BaseEntity {
   isPinned?: boolean
 }
 
+// 👤 User Profile & Business Onboarding
+export type StaffCountBracket = '1-5' | '6-20' | '21-50' | '50+'
+export type TransactionVolumeBracket = 'under_500' | '500_2500' | '2500_10000' | 'over_10000'
+export type MonthlyRevenueBracket = 'under_1m' | '1m_5m' | '5m_20m' | 'over_20m'
+export type AIModelMode = 'local_800mb' | 'cloud_api'
+
+export interface UserProfile extends BaseEntity {
+  id: string
+  orgId?: string | null
+  email: string
+  fullName: string
+  companyName: string
+  role?: string
+  staffCount: StaffCountBracket
+  monthlyTransactionVolume: TransactionVolumeBracket
+  monthlyRevenue: MonthlyRevenueBracket
+  aiModelMode: AIModelMode
+  customBackendEndpoint?: string
+  onboardingCompleted: boolean
+  lastLoginAt: number
+}
+
+// ⚙️ App Global Settings
+export interface AppSettings extends BaseEntity {
+  id: string
+  customBackendEndpoint: string
+  aiModelMode: AIModelMode
+  apiKey?: string
+  localModelDownloaded: boolean
+  localModelPath?: string
+  theme: 'light' | 'dark' | 'system'
+}
+
+// 🛡️ Activity Audit Logs
+export type AuditAction = 'CREATE' | 'UPDATE' | 'DELETE' | 'OVERRIDE' | 'INVITE' | 'LOGIN' | 'REVOKE'
+
+export interface AuditLogEntry extends BaseEntity {
+  id: string
+  orgId?: string | null
+  userId: string
+  userName: string
+  action: AuditAction
+  entityType: string
+  entityId: string
+  details: Record<string, unknown>
+}
+
+
