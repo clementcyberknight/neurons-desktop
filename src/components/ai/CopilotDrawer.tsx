@@ -14,6 +14,7 @@ import {
 } from 'lucide-react'
 import { SchemaRenderer } from './SchemaRenderer'
 import type { LLMOutputSchema } from '@/types/schemas'
+import { aiChatService } from '@/services/aiChatService'
 
 interface Message {
   id: string
@@ -29,6 +30,7 @@ interface Props {
   isOpen: boolean
   onClose: () => void
   onActionApplied?: () => void
+  currentModule?: string
 }
 
 const QUICK_PROMPTS = [
@@ -59,7 +61,12 @@ const QUICK_PROMPTS = [
   },
 ]
 
-export const CopilotDrawer: React.FC<Props> = ({ isOpen, onClose, onActionApplied }) => {
+export const CopilotDrawer: React.FC<Props> = ({
+  isOpen,
+  onClose,
+  onActionApplied,
+  currentModule = 'General',
+}) => {
   const [messages, setMessages] = useState<Message[]>([
     {
       id: 'msg-init',
@@ -70,6 +77,7 @@ export const CopilotDrawer: React.FC<Props> = ({ isOpen, onClose, onActionApplie
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [thinkMode, setThinkMode] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -91,34 +99,19 @@ export const CopilotDrawer: React.FC<Props> = ({ isOpen, onClose, onActionApplie
     setInput('')
     setLoading(true)
 
-    try {
-      let response: {
-        raw?: string
-        parsedJson?: LLMOutputSchema
-        outputType?: string
-        latencyMs?: number
-      } = {
-        raw: 'Offline local engine response',
-        outputType: 'CONVERSATIONAL_CHAT',
-        latencyMs: 520,
-      }
+    const t0 = Date.now()
 
-      if (typeof window !== 'undefined' && window.electronAPI) {
-        const result = await window.electronAPI.generateAI({ prompt: promptText })
-        response = {
-          raw: result.data || result.error || 'No response generated',
-          outputType: 'CONVERSATIONAL_CHAT',
-          latencyMs: 300,
-        }
-      } else {
-        // Fallback simulation in pure browser dev mode
-        await new Promise((r) => setTimeout(r, 800))
-        response = {
-          raw: 'Offline local engine response',
-          outputType: 'CONVERSATIONAL_CHAT',
-          latencyMs: 520,
-        }
-      }
+    try {
+      const history = messages.slice(-4).map((m) => ({
+        role: m.role,
+        content: m.content,
+      }))
+
+      const response = await aiChatService.sendMessage(promptText, {
+        thinkMode,
+        history,
+        currentModule,
+      })
 
       const assistantMsg: Message = {
         id: `msg-ai-${Date.now()}`,
@@ -126,7 +119,7 @@ export const CopilotDrawer: React.FC<Props> = ({ isOpen, onClose, onActionApplie
         content: response.raw,
         parsedJson: response.parsedJson,
         outputType: response.outputType,
-        latencyMs: response.latencyMs || 500,
+        latencyMs: response.latencyMs || Date.now() - t0,
         timestamp: Date.now(),
       }
 
@@ -138,7 +131,7 @@ export const CopilotDrawer: React.FC<Props> = ({ isOpen, onClose, onActionApplie
         {
           id: `msg-err-${Date.now()}`,
           role: 'assistant',
-          content: '⚠️ Failed to connect to local inference engine. Please ensure the local runtime is active.',
+          content: '⚠️ Failed to connect to AI engine. Please ensure network or local engine is active.',
           timestamp: Date.now(),
         },
       ])

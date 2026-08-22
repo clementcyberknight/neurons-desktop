@@ -24,7 +24,7 @@ interface AuthContextType {
   user: UserProfile | null
   appSettings: AppSettings | null
   isLoading: boolean
-  sendOtp: (email: string) => Promise<{ success: boolean; message: string; testOtp?: string }>
+  sendOtp: (email: string) => Promise<{ success: boolean; message: string }>
   verifyOtp: (email: string, otp: string) => Promise<{ success: boolean; isNewUser: boolean; message?: string }>
   saveOnboardingProfile: (data: OnboardingInput) => Promise<boolean>
   logout: () => Promise<void>
@@ -33,9 +33,11 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+const DEFAULT_ENDPOINT = 'https://neurons.savewithliquid.xyz'
+
 const DEFAULT_SETTINGS: AppSettings = {
   id: 'global-settings',
-  customBackendEndpoint: 'http://localhost:4000',
+  customBackendEndpoint: DEFAULT_ENDPOINT,
   aiModelMode: 'local_800mb',
   localModelDownloaded: false,
   theme: 'light',
@@ -43,9 +45,6 @@ const DEFAULT_SETTINGS: AppSettings = {
   updatedAt: Date.now(),
   synced: 1,
 }
-
-// In-memory OTP storage for local/offline validation
-const OTP_STORE = new Map<string, { code: string; expiresAt: number }>()
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<UserProfile | null>(null)
@@ -61,11 +60,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!settings) {
           await db.appSettings.add(DEFAULT_SETTINGS)
           settings = DEFAULT_SETTINGS
+        } else if (
+          !settings.customBackendEndpoint ||
+          settings.customBackendEndpoint.includes('api.neurons.ai') ||
+          settings.customBackendEndpoint.includes('localhost:4000') ||
+          settings.customBackendEndpoint.includes('127.0.0.1')
+        ) {
+          settings = {
+            ...settings,
+            customBackendEndpoint: DEFAULT_ENDPOINT,
+            updatedAt: Date.now(),
+          }
+          await db.appSettings.put(settings)
         }
+
         setAppSettings(settings)
-        if (settings.customBackendEndpoint) {
-          apiClient.setBaseUrl(settings.customBackendEndpoint)
-        }
+        apiClient.setBaseUrl(settings.customBackendEndpoint || DEFAULT_ENDPOINT)
 
         // Initialize JWT Auth Tokens if present
         const savedAccessToken = localStorage.getItem('neurons_access_token')
@@ -104,7 +114,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   // Send OTP to email
   const sendOtp = useCallback(
-    async (email: string): Promise<{ success: boolean; message: string; testOtp?: string }> => {
+    async (email: string): Promise<{ success: boolean; message: string }> => {
       const trimmedEmail = email.trim().toLowerCase()
       if (!trimmedEmail || !trimmedEmail.includes('@')) {
         return { success: false, message: 'Please enter a valid email address.' }
@@ -112,28 +122,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       try {
         const backendRes = await apiClient.sendOtp(trimmedEmail)
-        if (backendRes.testOtp) {
-          OTP_STORE.set(trimmedEmail, {
-            code: backendRes.testOtp,
-            expiresAt: Date.now() + 10 * 60 * 1000,
-          })
-        }
         return {
           success: true,
           message: backendRes.message || `A 6-digit verification code has been sent to ${trimmedEmail}.`,
-          testOtp: backendRes.testOtp,
         }
-      } catch (backendErr) {
-        console.warn('Backend OTP service offline, generating local offline OTP:', backendErr)
-        const generatedOtp = Math.floor(100000 + Math.random() * 900000).toString()
-        OTP_STORE.set(trimmedEmail, {
-          code: generatedOtp,
-          expiresAt: Date.now() + 10 * 60 * 1000,
-        })
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to send verification code. Please check your network.'
         return {
-          success: true,
-          message: `A 6-digit verification code has been sent to ${trimmedEmail}.`,
-          testOtp: generatedOtp,
+          success: false,
+          message,
         }
       }
     },
@@ -175,38 +172,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
           return { success: true, isNewUser: true }
         }
-      } catch (backendErr) {
-        console.warn('Backend OTP verification offline, using local verification:', backendErr)
-      }
 
-      const stored = OTP_STORE.get(trimmedEmail)
-      const isDevBypass = trimmedOtp === '123456' || (stored && stored.code === trimmedOtp)
-
-      if (!isDevBypass) {
-        if (!stored) {
-          return { success: false, isNewUser: false, message: 'OTP expired or not found. Please request a new code.' }
+        return {
+          success: false,
+          isNewUser: false,
+          message: 'Invalid verification code. Please try again.',
         }
-        if (stored.code !== trimmedOtp) {
-          return { success: false, isNewUser: false, message: 'Invalid verification code. Please check and try again.' }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Verification failed. Please check your code.'
+        return {
+          success: false,
+          isNewUser: false,
+          message,
         }
       }
-
-      OTP_STORE.delete(trimmedEmail)
-
-      const existingUser = await db.userProfile.filter((p) => p.email.toLowerCase() === trimmedEmail).first()
-      if (existingUser && existingUser.onboardingCompleted) {
-        const now = Date.now()
-        await db.userProfile.update(existingUser.id, {
-          lastLoginAt: now,
-          updatedAt: now,
-        })
-        const updated = { ...existingUser, lastLoginAt: now, updatedAt: now }
-        setUser(updated)
-        localStorage.setItem('neurons_active_user_id', updated.id)
-        return { success: true, isNewUser: false }
-      }
-
-      return { success: true, isNewUser: true }
     },
     []
   )

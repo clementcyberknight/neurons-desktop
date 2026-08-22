@@ -26,7 +26,6 @@ export const AuthModule: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState<string | null>(null)
   const [resendCooldown, setResendCooldown] = useState<number>(0)
-  const [testOtpCode, setTestOtpCode] = useState<string | null>(null)
 
   // Onboarding Slideshow State (6 Slides)
   const [slideIndex, setSlideIndex] = useState<number>(0)
@@ -79,9 +78,6 @@ export const AuthModule: React.FC = () => {
     try {
       const res = await sendOtp(email)
       if (res.success) {
-        if (res.testOtp) {
-          setTestOtpCode(res.testOtp)
-        }
         setAuthStep('OTP')
         setResendCooldown(45)
       } else {
@@ -243,7 +239,6 @@ export const AuthModule: React.FC = () => {
             setOtpValues={setOtpValues}
             isSubmitting={isSubmitting}
             errorMessage={errorMessage}
-            testOtpCode={testOtpCode}
             resendCooldown={resendCooldown}
             onVerify={handleVerifyOtp}
             onRequestResend={handleRequestOtp}

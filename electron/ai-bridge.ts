@@ -59,10 +59,43 @@ export class AIBridge {
       }
     }
 
-    // 2. Intelligent Offline Fallback Engine
-    const simulated = this.simulateModelInference(req.prompt)
+    // 2. Query Cloud Backend AI if local llama-server is not running
+    try {
+      const backendUrl = process.env.VITE_BACKEND_URL || 'https://neurons.savewithliquid.xyz'
+      const response = await fetch(`${backendUrl}/api/ai/generate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: req.prompt,
+          systemPrompt: req.systemPrompt,
+          temperature: req.temperature,
+          maxTokens: req.maxTokens,
+        }),
+      })
+
+      if (response.ok) {
+        const json = (await response.json()) as {
+          status: string
+          data: { raw: string; parsedJson?: Record<string, any>; outputType: string }
+        }
+        const latencyMs = Date.now() - t0
+        return {
+          raw: json.data.raw,
+          parsedJson: json.data.parsedJson,
+          outputType: json.data.outputType || 'CONVERSATIONAL_CHAT',
+          latencyMs,
+        }
+      }
+    } catch (err) {
+      console.warn('Backend AI generation unavailable:', err)
+    }
+
     const latencyMs = Date.now() - t0
-    return this.processOutput(simulated, latencyMs)
+    return {
+      raw: '⚠️ Local inference engine is currently offline. Please ensure the local GGUF server is started or switch to Cloud API mode.',
+      outputType: 'CONVERSATIONAL_CHAT',
+      latencyMs,
+    }
   }
 
   private queryLlamaServer(req: LLMRequest): Promise<string> {
@@ -134,127 +167,5 @@ export class AIBridge {
         latencyMs,
       }
     }
-  }
-
-  private simulateModelInference(prompt: string): string {
-    const lower = prompt.toLowerCase().trim()
-
-    // 0. Friendly Greetings
-    if (lower === 'hey' || lower === 'hi' || lower === 'hello' || lower === 'hey buddy' || lower.startsWith('hey ')) {
-      return JSON.stringify({
-        output_type: "CONVERSATIONAL_CHAT",
-        message: "Hey Clement 👏\nWhat are we building, breaking, or plotting today? 🚀"
-      })
-    }
-
-    // 0.1 Noun / Grammar Questions
-    if (lower.includes('noun')) {
-      return JSON.stringify({
-        output_type: "CONVERSATIONAL_CHAT",
-        message: "A **noun** is a word that names a **person**, **place**, **thing**, **animal**, or **idea**.\n\n### Examples\n- 👤 **Person**: teacher, Clement, doctor\n- 📍 **Place**: Nigeria, school, Lagos\n- 📦 **Thing**: phone, laptop, car\n- 🐕 **Animal**: dog, lion, eagle\n- 💡 **Idea**: freedom, happiness, intelligence\n\n**Example sentence:**\n> Here, *student*, *laptop*, and *Lagos* are nouns."
-      })
-    }
-
-    // 0.2 Simple Acknowledgements
-    if (lower.includes('thanks') || lower.includes('thank you')) {
-      return JSON.stringify({
-        output_type: "CONVERSATIONAL_CHAT",
-        message: "You're very welcome! Let me know whenever you're ready for the next task or analysis."
-      })
-    }
-
-    // 1. Chart Request
-    if (lower.includes('chart') || lower.includes('plot') || lower.includes('graph') || lower.includes('distribution')) {
-      return JSON.stringify({
-        output_type: "GENERATIVE_CHART",
-        chart_type: lower.includes('bar') ? "bar" : lower.includes('line') ? "line" : "pie",
-        title: "Warehouse Zone Pallet SKU Distribution",
-        summary: "Zone A holds 40% of all pallets (400 units), Zone B holds 35% (350 units), Zone C holds 15% (150 units), and Zone D holds 10% (100 units).",
-        data: {
-          labels: ["Zone A", "Zone B", "Zone C", "Zone D"],
-          datasets: [
-            {
-              label: "Pallet Count",
-              values: [400, 350, 150, 100]
-            }
-          ]
-        }
-      })
-    }
-
-    // 2. Alert / Fraud / Red Flag Request
-    if (lower.includes('alert') || lower.includes('fraud') || lower.includes('unauthorized') || lower.includes('shortfall') || lower.includes('override')) {
-      return JSON.stringify({
-        output_type: "RED_FLAG_ALERT",
-        severity: "HIGH",
-        flagged_module: "POS Cashier Reconciliation",
-        anomaly_type: "UNAUTHORIZED_DISCOUNT_OVERRIDE",
-        transaction_id: "TXN_8820",
-        reasoning: "Cashier ID #104 executed an unauthorized 80% manual discount override on POS Station 3 without manager credential verification.",
-        recommended_action: "Lock till station, restrict cashier #104 override permissions for 24 hours, and conduct managerial till audit."
-      })
-    }
-
-    // 3. Shift Schedule Request
-    if (lower.includes('shift') || lower.includes('schedule') || lower.includes('rota') || lower.includes('pharmacist')) {
-      return JSON.stringify({
-        output_type: "SHIFT_SCHEDULE",
-        week_starting: "2026-09-01",
-        schedule: [
-          { staff_id: "PHC_01", name: "Dr. Sarah Johnson", role: "Licensed Pharmacist", day: "Monday", shift: "08:00 - 16:30" },
-          { staff_id: "PHC_02", name: "Mr. David Kim", role: "Staff Pharmacist", day: "Tuesday", shift: "09:00 - 17:30" },
-          { staff_id: "PHC_03", name: "Ms. Clara Lee", role: "Pharmacy Technician", day: "Wednesday", shift: "08:00 - 16:30" },
-          { staff_id: "PHC_01", name: "Dr. Sarah Johnson", role: "Licensed Pharmacist", day: "Thursday", shift: "12:00 - 20:30" },
-          { staff_id: "PHC_02", name: "Mr. David Kim", role: "Staff Pharmacist", day: "Friday", shift: "08:00 - 16:30" }
-        ]
-      })
-    }
-
-    // 4. Auto Task Request
-    if (lower.includes('task') || lower.includes('follow-up') || lower.includes('ticket') || lower.includes('assign')) {
-      return JSON.stringify({
-        output_type: "AUTO_TASK",
-        task_title: "Audit POS Refund Overrides & Till Logs",
-        priority: "HIGH",
-        assignee_role: "Store Manager",
-        due_date: "2026-08-25",
-        subtasks: [
-          "Extract POS transaction logs for Cashier #104",
-          "Match manual overrides against physical receipt duplicates",
-          "Reconcile daily float discrepancy of ₦85,000",
-          "Submit weekly compliance sign-off report"
-        ]
-      })
-    }
-
-    // 5. Document Report Request
-    if (lower.includes('document') || lower.includes('report') || lower.includes('policy') || lower.includes('checklist')) {
-      return JSON.stringify({
-        output_type: "DOCUMENT_OUTPUT",
-        doc_title: "Store Audit & Cashier Float Reconciliation Policy (Q3 2026)",
-        format: "markdown",
-        content: "# Standard Operating Procedure: POS Cashier Float & Discrepancies\n\n**Effective Date:** August 20, 2026\n**Scope:** All Retail Branches & Checkout Stations\n\n## 1. Daily Reconciliation Protocol\n- Cashiers must perform a physical cash count at start and end of every shift.\n- Any discrepancy exceeding **₦5,000** ($10.00) triggers an automatic managerial alert.\n\n## 2. Override Authorization\n- Discounts exceeding 15% require dual-key biometric or manager PIN entry.\n- Manual refunds without original barcode receipts are strictly prohibited.\n\n## 3. Weekly Audit Sign-off\n- Branch manager inspects inventory discrepancy logs every Monday morning."
-      })
-    }
-
-    // 6. Deep Research Query
-    if (lower.includes('investigate') || lower.includes('variance') || lower.includes('research') || lower.includes('why')) {
-      return JSON.stringify({
-        output_type: "DEEP_RESEARCH",
-        target_sources: ["LOCAL_DB", "FINANCIAL_SYSTEM", "LICENSE_AGREEMENTS"],
-        search_queries: ["Q3 software license cost variance", "audit log Q3 2026", "concurrent user licensing rate"],
-        sources: [
-          { title: "Internal Audit Log Q3 2026", type: "LOCAL_DB", record_id: "AUD-Q3-2026", relevance: "High" },
-          { title: "Enterprise Software License Agreement", type: "LICENSE_AGREEMENTS", record_id: "LIC-2026-V2", relevance: "Critical" }
-        ],
-        response: "Analysis of internal audit logs reveals that software expenses exceeded forecast by 25% due to 4 additional unbudgeted user seats activated in July, combined with a 5% currency adjustment on USD-denominated maintenance tiers."
-      })
-    }
-
-    // 7. General Business Conversational Response
-    return JSON.stringify({
-      output_type: "CONVERSATIONAL_CHAT",
-      message: "To minimize cashier discrepancy losses during peak hours while keeping customer throughput high, I recommend implementing 3 key operational controls:\n\n1. **Real-time POS Discrepancy Alerts**: Configure the register to flag manual discount overrides or float differences over ₦5,000 immediately.\n2. **Staggered Shift Handover Buffers**: Give cashiers a dedicated 10-minute float verification window before peak rush rather than counting mid-line.\n3. **Quick-Scan Barcode Presets**: Minimize manual numeric item entry, which causes 78% of inadvertent price discrepancies.\n\nWould you like me to draft an official store policy document or generate an automated task for the store manager?"
-    })
   }
 }

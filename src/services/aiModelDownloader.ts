@@ -40,59 +40,44 @@ export class AiModelDownloader {
     }
 
     try {
-      // 1. Check OPFS (Origin Private File System)
       if (typeof navigator !== 'undefined' && navigator.storage && navigator.storage.getDirectory) {
         try {
           const root = await navigator.storage.getDirectory()
           const fileHandle = await root.getFileHandle(MODEL_METADATA.filename, { create: false })
           const file = await fileHandle.getFile()
-          if (file.size > 100 * 1024 * 1024) {
+          if (file.size > 500 * 1024 * 1024) {
             this.isCachedLocally = true
-            await this.markModelDownloaded()
+            await this.markModelDownloaded(true)
             return true
           }
         } catch {
-          // File does not exist in OPFS yet
+          // File not present in OPFS
         }
       }
 
-      // 2. Check CacheStorage API
       if (typeof window !== 'undefined' && 'caches' in window) {
         try {
           const cache = await caches.open(CACHE_NAME)
           const cachedResponse = await cache.match(MODEL_METADATA.downloadUrl)
           if (cachedResponse && cachedResponse.ok) {
-            this.isCachedLocally = true
-            await this.markModelDownloaded()
-            return true
+            const blob = await cachedResponse.clone().blob()
+            if (blob.size > 500 * 1024 * 1024) {
+              this.isCachedLocally = true
+              await this.markModelDownloaded(true)
+              return true
+            }
           }
         } catch {
-          // Not found in cache
+          // Not found in CacheStorage
         }
       }
 
-      // 3. Check Backend Local Disk
-      try {
-        const backendStatus = await apiClient.checkModelStatus(MODEL_METADATA.filename)
-        if (backendStatus && backendStatus.exists) {
-          this.isCachedLocally = true
-          await this.markModelDownloaded()
-          return true
-        }
-      } catch {
-        // Backend check offline or skipped
-      }
-
-      // 4. Check Local Dexie App Settings
-      const settings = await db.appSettings.get('global-settings')
-      if (settings?.localModelDownloaded) {
-        this.isCachedLocally = true
-        return true
-      }
-
+      this.isCachedLocally = false
+      await this.markModelDownloaded(false)
       return false
     } catch (err) {
       console.warn('[AiModelDownloader] Error during local model check:', err)
+      this.isCachedLocally = false
       return false
     }
   }
@@ -257,12 +242,12 @@ export class AiModelDownloader {
     }
   }
 
-  private async markModelDownloaded(): Promise<void> {
+  private async markModelDownloaded(isDownloaded: boolean = true): Promise<void> {
     const settings = await db.appSettings.get('global-settings')
     if (settings) {
       await db.appSettings.update('global-settings', {
-        localModelDownloaded: true,
-        localModelPath: MODEL_METADATA.filename,
+        localModelDownloaded: isDownloaded,
+        localModelPath: isDownloaded ? MODEL_METADATA.filename : undefined,
         updatedAt: Date.now(),
       })
     }

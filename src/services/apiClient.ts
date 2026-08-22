@@ -25,7 +25,7 @@ export class ApiClientError extends Error {
 }
 
 export class ApiClient {
-  private baseUrl: string = 'http://localhost:4000'
+  private baseUrl: string = 'https://neurons.savewithliquid.xyz'
   private authToken: string | null = null
   private refreshToken: string | null = null
 
@@ -120,8 +120,8 @@ export class ApiClient {
     }
   }
 
-  async sendOtp(email: string): Promise<{ success: boolean; message: string; testOtp?: string }> {
-    const result = await this.request<{ success: boolean; message: string; testOtp?: string }>(
+  async sendOtp(email: string): Promise<{ success: boolean; message: string }> {
+    const result = await this.request<{ success: boolean; message: string }>(
       '/api/auth/otp/send',
       {
         method: 'POST',
@@ -394,6 +394,37 @@ export class ApiClient {
       `/api/audit-logs?${query.toString()}`,
       { method: 'GET' }
     )
+    return result.data
+  }
+
+  async generateAI(payload: {
+    prompt: string
+    systemPrompt?: string
+    temperature?: number
+    maxTokens?: number
+    thinkMode?: boolean
+    history?: { role: 'user' | 'assistant' | 'system'; content: string }[]
+    context?: {
+      companyName?: string
+      currency?: string
+      userRole?: string
+      currentModule?: string
+    }
+  }): Promise<{
+    raw: string
+    parsedJson?: Record<string, unknown>
+    outputType: string
+    latencyMs: number
+  }> {
+    const result = await this.request<{
+      raw: string
+      parsedJson?: Record<string, unknown>
+      outputType: string
+      latencyMs: number
+    }>('/api/ai/generate', {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    })
     return result.data
   }
 }
