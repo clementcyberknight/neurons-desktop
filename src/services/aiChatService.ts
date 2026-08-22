@@ -85,33 +85,6 @@ export class AIChatService {
     }
 
     if (context.aiMode === 'local_800mb') {
-      // 1. If running inside Electron desktop
-      if (typeof window !== 'undefined' && window.electronAPI?.generateAI) {
-        try {
-          const electronResult = await window.electronAPI.generateAI({
-            prompt,
-            systemPrompt: options.systemPrompt,
-            temperature: options.thinkMode ? 0.4 : 0.2,
-          })
-
-          if (electronResult && typeof electronResult === 'object') {
-            const rawText = electronResult.raw || electronResult.data || electronResult.error || ''
-            if (rawText) {
-              return {
-                raw: rawText,
-                parsedJson: electronResult.parsedJson as unknown as LLMOutputSchema | undefined,
-                outputType: electronResult.outputType || 'CONVERSATIONAL_CHAT',
-                latencyMs: electronResult.latencyMs || Date.now() - t0,
-                engineMode: 'local_800mb',
-              }
-            }
-          }
-        } catch (electronErr) {
-          console.error('[AIChatService] Electron local model execution failed:', electronErr)
-        }
-      }
-
-      // 2. If running in browser / WebAssembly with downloaded model
       if (context.localModelReady) {
         try {
           const wllamaResult = await localWllamaEngine.generate({
@@ -128,16 +101,23 @@ export class AIChatService {
             latencyMs: wllamaResult.latencyMs,
             engineMode: 'local_800mb',
           }
-        } catch (wllamaErr) {
-          console.error('[AIChatService] Local WebAssembly inference error:', wllamaErr)
+        } catch (wllamaErr: unknown) {
+          const errMsg = wllamaErr instanceof Error ? wllamaErr.message : String(wllamaErr)
+          console.error('[AIChatService] Local WebAssembly inference error:', errMsg)
+          return {
+            raw: `⚠️ **Local AI Engine Error**\n\n${errMsg}\n\nPlease try sending your message again.`,
+            outputType: 'CONVERSATIONAL_CHAT',
+            latencyMs: Date.now() - t0,
+            engineMode: 'local_800mb',
+          }
         }
-      } else {
-        return {
-          raw: '⚠️ **Local AI Model (698 MB) is not yet downloaded on this device.**\n\nTo use on-device local AI with 100% offline autonomy, please go to **Settings → AI Engine** to download the `bau-small-1.5b.gguf` model from Hugging Face.',
-          outputType: 'CONVERSATIONAL_CHAT',
-          latencyMs: Date.now() - t0,
-          engineMode: 'local_800mb',
-        }
+      }
+
+      return {
+        raw: '⚠️ **Local AI Model (698 MB) is not yet downloaded on this device.**\n\nTo use on-device local AI with 100% offline autonomy, please download the `bau-small-1.5b.gguf` model from Hugging Face.',
+        outputType: 'CONVERSATIONAL_CHAT',
+        latencyMs: Date.now() - t0,
+        engineMode: 'local_800mb',
       }
     }
 

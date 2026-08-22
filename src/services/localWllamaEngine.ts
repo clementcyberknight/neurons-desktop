@@ -1,5 +1,5 @@
-import { Wllama } from '@wllama/wllama'
-import { aiModelDownloader } from './aiModelDownloader'
+import { Wllama, type AssetsPathConfig } from '@wllama/wllama'
+import { MODEL_METADATA, aiModelDownloader } from './aiModelDownloader'
 import type { LLMOutputSchema } from '@/types/schemas'
 
 export interface LocalGenerateOptions {
@@ -19,6 +19,60 @@ export interface LocalGenerateResult {
   tokensPerSecond: number
 }
 
+const WLLAMA_ASSETS: AssetsPathConfig = {
+  default: '/wllama/wllama.wasm',
+  'single-thread/wllama.wasm': '/wllama/wllama.wasm',
+  'multi-thread/wllama.wasm': '/wllama/wllama.wasm',
+}
+
+function parseModelOutput(
+  rawText: string,
+  latencyMs: number,
+  tokensPerSecond: number
+): LocalGenerateResult {
+  let cleanText = rawText.trim()
+
+  if (cleanText.startsWith('```json')) {
+    cleanText = cleanText.replace(/^```json\s*/, '').replace(/\s*```$/, '').trim()
+  } else if (cleanText.startsWith('```')) {
+    cleanText = cleanText.replace(/^```\s*/, '').replace(/\s*```$/, '').trim()
+  }
+
+  if (cleanText.startsWith('{') && cleanText.endsWith('}')) {
+    try {
+      const parsed: unknown = JSON.parse(cleanText)
+      if (
+        parsed &&
+        typeof parsed === 'object' &&
+        'output_type' in parsed &&
+        typeof (parsed as Record<string, unknown>).output_type === 'string'
+      ) {
+        const parsedRecord = parsed as Record<string, unknown>
+        const messageText = typeof parsedRecord.message === 'string' ? parsedRecord.message : cleanText
+        const outputType = typeof parsedRecord.output_type === 'string' ? parsedRecord.output_type : 'CONVERSATIONAL_CHAT'
+        const isConversational = outputType === 'CONVERSATIONAL_CHAT'
+
+        return {
+          raw: messageText,
+          parsedJson: isConversational ? undefined : (parsed as LLMOutputSchema),
+          outputType,
+          latencyMs,
+          tokensPerSecond,
+        }
+      }
+    } catch (parseError: unknown) {
+      console.warn('[LocalWllamaEngine] Failed to parse JSON-like output, treating as conversational text:', parseError)
+    }
+  }
+
+  return {
+    raw: rawText,
+    outputType: 'CONVERSATIONAL_CHAT',
+    latencyMs,
+    tokensPerSecond,
+  }
+}
+
 export class LocalWllamaEngine {
   private wllama: Wllama | null = null
   private isLoaded: boolean = false
@@ -31,8 +85,10 @@ export class LocalWllamaEngine {
     }
 
     if (this.isLoading) {
-      while (this.isLoading) {
+      let waitCount = 0
+      while (this.isLoading && waitCount < 50) {
         await new Promise((r) => setTimeout(r, 200))
+        waitCount++
       }
       return this.isLoaded
     }
@@ -41,37 +97,36 @@ export class LocalWllamaEngine {
     this.loadError = null
 
     try {
-      const isDownloaded = await aiModelDownloader.isModelDownloaded()
-      if (!isDownloaded) {
-        this.isLoading = false
-        return false
-      }
+      console.info('[LocalWllamaEngine] Initializing WebAssembly GGUF runtime...')
+
+      this.wllama = new Wllama(WLLAMA_ASSETS, {
+        allowOffline: true,
+        suppressNativeLog: false,
+      })
 
       const file = await aiModelDownloader.getLocalModelFile()
-      if (!file) {
-        this.isLoading = false
-        return false
+      if (file) {
+        console.info(`[LocalWllamaEngine] Loading model from local storage (${(file.size / (1024 * 1024)).toFixed(1)} MB)...`)
+        await this.wllama.loadModel([file], {
+          n_ctx: 1024,
+          n_threads: 2,
+        })
+      } else {
+        console.info('[LocalWllamaEngine] Loading model from URL/Cache...')
+        await this.wllama.loadModelFromUrl(MODEL_METADATA.downloadUrl, {
+          n_ctx: 1024,
+          n_threads: 2,
+          useCache: true,
+        })
       }
-
-      const wasmPath = '/wllama/wllama.wasm'
-
-      this.wllama = new Wllama({
-        default: wasmPath,
-        'single-thread/wllama.wasm': wasmPath,
-        'multi-thread/wllama.wasm': wasmPath,
-      })
-
-      await this.wllama.loadModel([file], {
-        n_ctx: 2048,
-        n_threads: 4,
-      })
 
       this.isLoaded = true
       this.isLoading = false
+      console.info('[LocalWllamaEngine] Model successfully loaded and ready for inference.')
       return true
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : String(err)
-      console.error('[LocalWllamaEngine] Failed to load local GGUF model into WebAssembly:', err)
+      console.error('[LocalWllamaEngine] Initialization error:', errorMsg)
       this.loadError = errorMsg
       this.isLoaded = false
       this.isLoading = false
@@ -90,64 +145,47 @@ export class LocalWllamaEngine {
   async generate(options: LocalGenerateOptions): Promise<LocalGenerateResult> {
     const t0 = Date.now()
 
-    const ready = await this.init()
-    if (!ready || !this.wllama) {
-      throw new Error(this.loadError || 'Local GGUF model is not loaded in memory.')
-    }
-
-    const messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = []
-
-    if (options.systemPrompt) {
-      messages.push({ role: 'system', content: options.systemPrompt })
-    }
-
-    if (options.history?.length) {
-      for (const h of options.history) {
-        messages.push({ role: h.role, content: h.content })
-      }
-    }
-
-    messages.push({ role: 'user', content: options.prompt })
-
-    const response = await this.wllama.createChatCompletion({
-      messages,
-      temperature: options.temperature ?? 0.2,
-      max_tokens: options.maxTokens ?? 384,
+    const timeoutPromise = new Promise<never>((_, reject) => {
+      setTimeout(() => reject(new Error('Local inference timed out (30s).')), 30000)
     })
 
-    const raw = response.choices?.[0]?.message?.content || ''
-    const latencyMs = Date.now() - t0
-    const wordCount = raw.split(/\s+/).filter(Boolean).length
-    const tokensPerSecond = latencyMs > 0 ? wordCount / (latencyMs / 1000) : 0
+    const runInference = async (): Promise<LocalGenerateResult> => {
+      const ready = await this.init()
+      if (!ready || !this.wllama) {
+        throw new Error(this.loadError || 'Local GGUF model is not loaded in memory.')
+      }
 
-    let cleanText = raw.trim()
-    if (cleanText.startsWith('```json')) {
-      cleanText = cleanText.replace(/^```json\s*/, '').replace(/\s*```$/, '')
-    } else if (cleanText.startsWith('```')) {
-      cleanText = cleanText.replace(/^```\s*/, '').replace(/\s*```$/, '')
-    }
+      const messages: { role: 'user' | 'assistant' | 'system'; content: string }[] = []
 
-    try {
-      const parsed = JSON.parse(cleanText)
-      if (parsed && typeof parsed === 'object' && parsed.output_type) {
-        return {
-          raw: parsed.message || cleanText,
-          parsedJson: parsed.output_type === 'CONVERSATIONAL_CHAT' ? undefined : (parsed as LLMOutputSchema),
-          outputType: parsed.output_type || 'CONVERSATIONAL_CHAT',
-          latencyMs,
-          tokensPerSecond,
+      if (options.systemPrompt) {
+        messages.push({ role: 'system', content: options.systemPrompt })
+      }
+
+      if (options.history?.length) {
+        for (const h of options.history) {
+          messages.push({ role: h.role, content: h.content })
         }
       }
-    } catch {
-      // Conversational output
+
+      messages.push({ role: 'user', content: options.prompt })
+
+      console.info(`[LocalWllamaEngine] Running inference for prompt: "${options.prompt.slice(0, 50)}..."`)
+
+      const response = await this.wllama.createChatCompletion({
+        messages,
+        temperature: options.temperature ?? 0.2,
+        max_tokens: options.maxTokens ?? 256,
+      })
+
+      const raw = response.choices?.[0]?.message?.content || ''
+      const latencyMs = Date.now() - t0
+      const wordCount = raw.split(/\s+/).filter(Boolean).length
+      const tokensPerSecond = latencyMs > 0 ? wordCount / (latencyMs / 1000) : 0
+
+      return parseModelOutput(raw, latencyMs, tokensPerSecond)
     }
 
-    return {
-      raw,
-      outputType: 'CONVERSATIONAL_CHAT',
-      latencyMs,
-      tokensPerSecond,
-    }
+    return await Promise.race([runInference(), timeoutPromise])
   }
 }
 
