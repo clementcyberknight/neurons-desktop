@@ -3,6 +3,7 @@ import { Copy, Check } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { SchemaRenderer } from '@/components/ai/SchemaRenderer'
+import { ModelDownloadCard } from './ModelDownloadCard'
 import type { ChatMessage } from '@/types/database'
 
 interface ChatMessageItemProps {
@@ -17,6 +18,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
   onCopy,
 }) => {
   const isUser = message.role === 'user'
+  const isModelDownloadPrompt = !isUser && message.content.includes('Local AI Model') && message.content.includes('not yet downloaded')
 
   return (
     <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} group`}>
@@ -36,6 +38,7 @@ export const ChatMessageItem: React.FC<ChatMessageItemProps> = ({
             ) : (
               <div className="prose prose-sm text-neutral-900 break-words leading-relaxed">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.content}</ReactMarkdown>
+                {isModelDownloadPrompt && <ModelDownloadCard />}
               </div>
             )}
           </div>

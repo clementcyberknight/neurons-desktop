@@ -1,6 +1,7 @@
 import { apiClient } from './apiClient'
 import { db } from '@/db/localDb'
 import { aiModelDownloader } from './aiModelDownloader'
+import { localWllamaEngine } from './localWllamaEngine'
 import type { LLMOutputSchema } from '@/types/schemas'
 import type { AIModelMode, UserProfile, AppSettings } from '@/types/database'
 
@@ -84,15 +85,7 @@ export class AIChatService {
     }
 
     if (context.aiMode === 'local_800mb') {
-      if (!context.localModelReady && typeof window !== 'undefined' && !window.electronAPI) {
-        return {
-          raw: '⚠️ **Local AI Model not found on this device.**\n\nYou have configured **Local Edge AI Mode**, but the 698 MB Qwen model weights have not been downloaded yet.\n\nPlease go to **Settings → AI Engine** to download the model from Hugging Face for offline use, or switch to **Cloud Server API**.',
-          outputType: 'CONVERSATIONAL_CHAT',
-          latencyMs: Date.now() - t0,
-          engineMode: 'local_800mb',
-        }
-      }
-
+      // 1. If running inside Electron desktop
       if (typeof window !== 'undefined' && window.electronAPI?.generateAI) {
         try {
           const electronResult = await window.electronAPI.generateAI({
@@ -114,11 +107,41 @@ export class AIChatService {
             }
           }
         } catch (electronErr) {
-          console.error('[AIChatService] Electron local model execution failed, querying cloud API:', electronErr)
+          console.error('[AIChatService] Electron local model execution failed:', electronErr)
+        }
+      }
+
+      // 2. If running in browser / WebAssembly with downloaded model
+      if (context.localModelReady) {
+        try {
+          const wllamaResult = await localWllamaEngine.generate({
+            prompt,
+            systemPrompt: options.systemPrompt,
+            temperature: options.thinkMode ? 0.4 : 0.2,
+            history: options.history,
+          })
+
+          return {
+            raw: wllamaResult.raw,
+            parsedJson: wllamaResult.parsedJson,
+            outputType: wllamaResult.outputType,
+            latencyMs: wllamaResult.latencyMs,
+            engineMode: 'local_800mb',
+          }
+        } catch (wllamaErr) {
+          console.error('[AIChatService] Local WebAssembly inference error:', wllamaErr)
+        }
+      } else {
+        return {
+          raw: '⚠️ **Local AI Model (698 MB) is not yet downloaded on this device.**\n\nTo use on-device local AI with 100% offline autonomy, please go to **Settings → AI Engine** to download the `bau-small-1.5b.gguf` model from Hugging Face.',
+          outputType: 'CONVERSATIONAL_CHAT',
+          latencyMs: Date.now() - t0,
+          engineMode: 'local_800mb',
         }
       }
     }
 
+    // 3. Fallback / Cloud API
     try {
       const result = await apiClient.generateAI({
         prompt,
